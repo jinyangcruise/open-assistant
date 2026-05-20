@@ -87,6 +87,37 @@
         </form>
       </section>
 
+      <!-- Prompt Management Section -->
+      <section class="prompts-section">
+        <h2>Prompt Management</h2>
+        
+        <div id="promptsList" class="prompts-list">
+          <!-- Rendered by renderer.js -->
+        </div>
+
+        <div class="prompts-actions">
+          <button id="addPromptBtn" class="btn btn-sm btn-primary">+ Add</button>
+          <button id="editPromptBtn" class="btn btn-sm btn-secondary" disabled>Edit</button>
+          <button id="deletePromptBtn" class="btn btn-sm btn-danger" disabled>Delete</button>
+        </div>
+
+        <div id="promptEditor" class="prompt-editor" style="display:none;">
+          <div class="form-group">
+            <label for="promptName">Prompt Name</label>
+            <input type="text" id="promptName" placeholder="e.g. Code Completion">
+          </div>
+          <div class="form-group">
+            <label for="promptContent">Prompt Content</label>
+            <textarea id="promptContent" rows="6" placeholder="Enter your prompt text here..."></textarea>
+            <span class="help-text">This replaces the system prompt entirely when selected. Write your full instruction to the AI.</span>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="savePromptBtn" class="btn btn-primary">Save</button>
+            <button type="button" id="cancelPromptBtn" class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Results Section -->
       <section class="results-section">
         <h2>📊 Last Result</h2>

@@ -15,6 +15,22 @@ const statusIndicator = document.getElementById('statusIndicator');
 const resultContainer = document.getElementById('resultContainer');
 const logContainer = document.getElementById('logContainer');
 
+// Prompt state
+let prompts = [];
+let selectedPromptId = 'system-default';
+let editingPromptId = null;
+
+// Prompt DOM Elements
+const promptsList = document.getElementById('promptsList');
+const addPromptBtn = document.getElementById('addPromptBtn');
+const editPromptBtn = document.getElementById('editPromptBtn');
+const deletePromptBtn = document.getElementById('deletePromptBtn');
+const promptEditor = document.getElementById('promptEditor');
+const promptName = document.getElementById('promptName');
+const promptContent = document.getElementById('promptContent');
+const savePromptBtn = document.getElementById('savePromptBtn');
+const cancelPromptBtn = document.getElementById('cancelPromptBtn');
+
 // Initialize
 async function init() {
   // Load config
@@ -27,6 +43,9 @@ async function init() {
   // Setup IPC listeners
   window.electronAPI.onAnalysisResult(handleAnalysisResult);
   window.electronAPI.onError(handleError);
+  
+  // Load prompt management
+  await loadPrompts();
   
   addLog('Application initialized', 'info');
 }
@@ -51,6 +70,9 @@ function setupEventListeners() {
       addLog('Settings reset to defaults', 'info');
     }
   });
+  
+  // Prompt management
+  setupPromptEventListeners();
 }
 
 async function triggerAssistant() {
@@ -201,6 +223,148 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ===== Prompt Management =====
+
+function setupPromptEventListeners() {
+  addPromptBtn.addEventListener('click', function() {
+    showPromptEditor(null);
+  });
+
+  editPromptBtn.addEventListener('click', function() {
+    var prompt = prompts.find(function(p) { return p.id === selectedPromptId; });
+    if (prompt) showPromptEditor(prompt);
+  });
+
+  deletePromptBtn.addEventListener('click', async function() {
+    var prompt = prompts.find(function(p) { return p.id === selectedPromptId; });
+    if (!prompt) return;
+    if (!confirm('Delete prompt "' + prompt.name + '"?')) return;
+    var result = await window.electronAPI.deletePrompt(prompt.id);
+    prompts = result.prompts;
+    selectedPromptId = result.selectedId;
+    renderPrompts();
+    addLog('Deleted prompt: ' + prompt.name, 'info');
+  });
+
+  savePromptBtn.addEventListener('click', async function() {
+    await savePrompt();
+  });
+
+  cancelPromptBtn.addEventListener('click', function() {
+    hidePromptEditor();
+  });
+}
+
+async function loadPrompts() {
+  var result = await window.electronAPI.getPrompts();
+  prompts = result.prompts || [];
+  selectedPromptId = result.selectedId || 'system-default';
+  renderPrompts();
+}
+
+function renderPrompts() {
+  // Clear list
+  promptsList.innerHTML = '';
+
+  // System default prompt (always first, built-in)
+  var defaultItem = document.createElement('div');
+  defaultItem.className = 'prompt-item' + (selectedPromptId === 'system-default' ? ' selected' : '');
+  defaultItem.dataset.promptId = 'system-default';
+  defaultItem.innerHTML = '<div class="prompt-item-radio">' +
+    (selectedPromptId === 'system-default' ? '&#9679;' : '&#9675;') +
+    '</div>' +
+    '<div class="prompt-item-info">' +
+    '  <div class="prompt-item-name">System Default</div>' +
+    '  <div class="prompt-item-preview">Built-in prompt: analyze screenshot and provide smart completion suggestions</div>' +
+    '</div>';
+  defaultItem.addEventListener('click', async function() {
+    await window.electronAPI.selectPrompt('system-default');
+    selectedPromptId = 'system-default';
+    renderPrompts();
+    addLog('Selected prompt: System Default', 'info');
+  });
+  promptsList.appendChild(defaultItem);
+
+  // User-defined prompts
+  for (var i = 0; i < prompts.length; i++) {
+    var p = prompts[i];
+    var preview = p.content ? p.content.substring(0, 60).replace(/\n/g, ' ') : '(empty)';
+    if (p.content && p.content.length > 60) preview += '...';
+    
+    var item = document.createElement('div');
+    item.className = 'prompt-item' + (selectedPromptId === p.id ? ' selected' : '');
+    item.dataset.promptId = p.id;
+    item.innerHTML = '<div class="prompt-item-radio">' +
+      (selectedPromptId === p.id ? '&#9679;' : '&#9675;') +
+      '</div>' +
+      '<div class="prompt-item-info">' +
+      '  <div class="prompt-item-name">' + escapeHtml(p.name) + '</div>' +
+      '  <div class="prompt-item-preview">' + escapeHtml(preview) + '</div>' +
+      '</div>';
+    item.addEventListener('click', (function(pid) {
+      return async function() {
+        await window.electronAPI.selectPrompt(pid);
+        selectedPromptId = pid;
+        renderPrompts();
+        var found = prompts.find(function(p) { return p.id === pid; });
+        addLog('Selected prompt: ' + (found ? found.name : pid), 'info');
+      };
+    })(p.id));
+    promptsList.appendChild(item);
+  }
+
+  // Update button states
+  editPromptBtn.disabled = selectedPromptId === 'system-default';
+  deletePromptBtn.disabled = selectedPromptId === 'system-default' || !prompts.length;
+}
+
+function showPromptEditor(prompt) {
+  if (prompt) {
+    promptName.value = prompt.name || '';
+    promptContent.value = prompt.content || '';
+    editingPromptId = prompt.id;
+  } else {
+    promptName.value = '';
+    promptContent.value = '';
+    editingPromptId = null;
+  }
+  promptEditor.style.display = 'block';
+}
+
+function hidePromptEditor() {
+  promptEditor.style.display = 'none';
+  promptName.value = '';
+  promptContent.value = '';
+  editingPromptId = null;
+}
+
+async function savePrompt() {
+  var name = promptName.value.trim();
+  var content = promptContent.value.trim();
+  
+  if (!name) {
+    alert('Please enter a prompt name.');
+    return;
+  }
+  if (!content) {
+    alert('Please enter prompt content.');
+    return;
+  }
+
+  var data = {
+    id: editingPromptId,
+    name: name,
+    content: content
+  };
+
+  var result = await window.electronAPI.savePrompt(data);
+  prompts = result.prompts;
+  hidePromptEditor();
+  renderPrompts();
+  
+  addLog('Prompt saved: ' + name, 'success');
 }
 
 // Start

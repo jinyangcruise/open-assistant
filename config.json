@@ -4,8 +4,9 @@
   "timeout_seconds": 30,
   "auto_insert": true,
   "screenshot_region": "full",
-  "prompt_template": "analysis",
   "max_response_length": 2000,
   "show_notifications": true,
-  "log_level": "info"
+  "log_level": "info",
+  "prompts": [],
+  "selected_prompt_id": "system-default"
 }

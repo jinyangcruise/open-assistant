@@ -314,6 +314,112 @@ footer a:hover {
   text-decoration: underline;
 }
 
+/* Prompt Management */
+.prompts-section .form-actions {
+  margin-top: 1rem;
+}
+
+.prompts-list {
+  margin-bottom: 1rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.prompt-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.prompt-item:hover {
+  border-color: var(--primary-color);
+  background-color: #f5f3ff;
+}
+
+.prompt-item.selected {
+  border-color: var(--primary-color);
+  background-color: #eef2ff;
+}
+
+.prompt-item-radio {
+  font-size: 1.25rem;
+  color: var(--primary-color);
+  flex-shrink: 0;
+  width: 1.5rem;
+  text-align: center;
+}
+
+.prompt-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.prompt-item-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-color);
+  margin-bottom: 0.15rem;
+}
+
+.prompt-item-preview {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompts-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.btn-sm {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.btn-danger {
+  background-color: var(--error-color);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.prompt-editor {
+  background: #f9fafb;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+.prompt-editor .form-group textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: 'Courier New', monospace;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.prompt-editor .form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .container {

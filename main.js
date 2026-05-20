@@ -181,11 +181,24 @@ async function handleShortcut() {
     const screenshotBuffer = await takeScreenshot();
     console.log('Screenshot captured:', screenshotBuffer.length, 'bytes');
 
-    // 3. Analyze with Doubao
+    // 3. Get selected prompt (if custom)
+    let customPrompt = null;
+    const selectedId = store.get('selected_prompt_id');
+    if (selectedId && selectedId !== 'system-default') {
+      const prompts = store.get('prompts') || [];
+      const found = prompts.find(function(p) { return p.id === selectedId; });
+      if (found && found.content && found.content.trim()) {
+        customPrompt = found.content.trim();
+        console.log('Using custom prompt:', found.name);
+      }
+    }
+
+    // 4. Analyze with Doubao
     console.log('Analyzing with Doubao...');
     const result = await analyzeWithDoubao(screenshotBuffer, {
       appName: activeWindow.title,
-      timeout: store.get('timeout_seconds') * 1000
+      timeout: store.get('timeout_seconds') * 1000,
+      customPrompt: customPrompt
     });
 
     console.log('Analysis result:', result);
@@ -274,8 +287,53 @@ function setupIpcHandlers() {
 
   // Get logs
   ipcMain.handle('get-logs', () => {
-    // Return recent logs (implement logging system if needed)
     return [];
+  });
+
+  // --- Prompt Management ---
+
+  // Get all prompts with selected ID
+  ipcMain.handle('get-prompts', () => {
+    return {
+      prompts: store.get('prompts') || [],
+      selectedId: store.get('selected_prompt_id') || 'system-default'
+    };
+  });
+
+  // Save a prompt (create or update)
+  ipcMain.handle('save-prompt', (event, promptData) => {
+    const prompts = store.get('prompts') || [];
+    const idx = prompts.findIndex(function(p) { return p.id === promptData.id; });
+    
+    if (idx >= 0) {
+      prompts[idx] = promptData;
+    } else {
+      promptData.id = 'prompt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+      prompts.push(promptData);
+    }
+    
+    store.set('prompts', prompts);
+    return { prompts: prompts, selectedId: store.get('selected_prompt_id') };
+  });
+
+  // Delete a prompt
+  ipcMain.handle('delete-prompt', (event, id) => {
+    var prompts = store.get('prompts') || [];
+    prompts = prompts.filter(function(p) { return p.id !== id; });
+    store.set('prompts', prompts);
+    
+    // If deleted prompt was selected, revert to system-default
+    if (store.get('selected_prompt_id') === id) {
+      store.set('selected_prompt_id', 'system-default');
+    }
+    
+    return { prompts: prompts, selectedId: store.get('selected_prompt_id') };
+  });
+
+  // Select a prompt
+  ipcMain.handle('select-prompt', (event, id) => {
+    store.set('selected_prompt_id', id);
+    return { selectedId: id };
   });
 }
 

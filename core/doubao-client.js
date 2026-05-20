@@ -463,7 +463,9 @@ async function analyzeWithDoubao(screenshotBuffer, context = {}) {
     }
 
     // Build analysis prompt (screenshot is now embedded in chat)
-    const prompt = buildAnalysisPrompt(context, uploadResult.success);
+    const prompt = context.customPrompt && context.customPrompt.trim()
+      ? context.customPrompt.trim()
+      : buildAnalysisPrompt(context, uploadResult.success);
     console.log('Prompt:', prompt.substring(0, 100) + '...');
 
     // Inject text prompt
@@ -508,9 +510,10 @@ async function analyzeWithDoubao(screenshotBuffer, context = {}) {
 }
 
 /**
- * Build analysis prompt
+ * Build the default system analysis prompt
  * @param {Object} context - Context information
  * @param {boolean} hasScreenshot - Whether a screenshot was successfully uploaded
+ * @returns {string} The generated prompt text
  */
 function buildAnalysisPrompt(context, hasScreenshot = true) {
   const screenshotNote = hasScreenshot
