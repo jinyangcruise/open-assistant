@@ -332,17 +332,7 @@ class DoubaoClient {
         });
         console.log('File set via DOM.setFileInputFiles');
 
-        // Trigger events to notify the React app
-        await this.evaluate(`(function() {
-          var inputs = document.querySelectorAll('input[type="file"]');
-          for (var i = 0; i < inputs.length; i++) {
-            inputs[i].dispatchEvent(new Event('change', { bubbles: true }));
-            inputs[i].dispatchEvent(new Event('input', { bubbles: true }));
-          }
-          return { count: inputs.length };
-        })()`);
-
-        // Wait for upload to process
+        // Wait for upload to process (DOM.setFileInputFiles already fires change event internally)
         console.log('Waiting for upload to complete...');
         await new Promise(resolve => setTimeout(resolve, 3000));
         return { success: true, method: 'setFileInputFiles' };
