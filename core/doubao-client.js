@@ -22,6 +22,8 @@ const SEL = {
   SEND_MESSAGE: '[data-testid="send_message"]',
   FILE_INPUT: 'input[type="file"]',
   UPLOAD_BUTTON: '[data-testid*="upload"], [data-testid*="image"], [data-testid*="file"], [data-testid*="attachment"]',
+  // Action buttons that appear after Doubao completes a response
+  ACTION_KEYWORDS: ['复制', '朗读', '播报', '喜欢', '不喜欢', '分享', '重新生成', 'copy', 'voice', 'like', 'dislike', 'share', 'regenerate', 'action', 'more'],
 };
 
 class DoubaoClient {
@@ -230,72 +232,95 @@ class DoubaoClient {
   }
 
   /**
-   * Wait for Doubao response using message count strategy
+   * Wait for Doubao response by detecting action buttons
+   * (复制/朗读/喜欢/分享/重新生成 etc. — only appear after reply is complete)
    */
-  async waitForResponse(beforeCount, timeout = 30000) {
-    const pollInterval = 1000;
+  async waitForResponse(timeout = 30000) {
+    const pollInterval = 500;
     const maxPolls = Math.ceil(timeout / pollInterval);
-    let lastTextLength = 0;
-    let stableCount = 0;
 
-    console.log(`[Debug] Waiting for response (baseline: ${beforeCount} messages)...`);
+    console.log('[Debug] Waiting for response (polling for action buttons)...');
 
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-      const script = `(function(pollIdx) {
-        const msgs = document.querySelectorAll('${SEL.MESSAGE}');
-        
+      const result = await this.evaluate(`(function() {
         // Find the last assistant message (non-user)
-        var lastAssistantText = '';
-        var hasIndicator = false;
+        var msgs = document.querySelectorAll('${SEL.MESSAGE}');
+        var lastAssistantEl = null;
         for (var idx = msgs.length - 1; idx >= 0; idx--) {
           var m = msgs[idx];
           if (!m.classList.contains('justify-end')) {
-            var textEl = m.querySelector('${SEL.MESSAGE_TEXT}');
-            if (textEl) {
-              hasIndicator = textEl.querySelector('${SEL.INDICATOR}') !== null || textEl.getAttribute('data-show-indicator') === 'true';
-              var children = textEl.querySelectorAll('div[dir]');
-              if (children.length > 0) {
-                lastAssistantText = Array.from(children).map(function(c) { return c.innerText || c.textContent || ''; }).join('');
-              } else {
-                lastAssistantText = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
-              }
-            }
+            lastAssistantEl = m;
             break;
           }
         }
-        
-        var textLen = lastAssistantText.length;
-        
-        if (pollIdx % 5 === 0) {
-          return { phase: textLen > 10 && !hasIndicator ? 'checking' : 'waiting', textLen: textLen, hasIndicator: hasIndicator, debug: 'lastAssistant len=' + textLen + ' indicator=' + hasIndicator };
-        }
-        
-        if (textLen > 10 && !hasIndicator) {
-          return { phase: 'checking', text: lastAssistantText, textLen: textLen, hasIndicator: false };
-        }
-        return { phase: 'waiting', text: null, textLen: textLen, hasIndicator: hasIndicator };
-      })(${i})`;
+        if (!lastAssistantEl) return { done: false };
 
-      const result = await this.evaluate(script);
-      
-      if (i % 5 === 0) {
-        console.log(`[Debug] Poll ${i}:`, result?.debug || `phase=${result?.phase} len=${result?.textLen}`);
-      }
-      
-      // Stability check: text length unchanged for 3 seconds
-      if (result?.textLen > 10 && !result?.hasIndicator) {
-        if (result.textLen === lastTextLength) {
-          stableCount++;
-          if (stableCount >= 3) {
-            console.log(`[Debug] Response stable for ${stableCount}s, extracting...`);
-            return result.text || '';
-          }
-        } else {
-          stableCount = 0;
+        // Action indicator keywords
+        var actionKeywords = ${JSON.stringify(SEL.ACTION_KEYWORDS)};
+
+        // Search for action buttons within the message container and its siblings
+        var container = lastAssistantEl.parentElement || lastAssistantEl;
+        var candidates = container.querySelectorAll('button, [role="button"], [tabindex]');
+
+        // Also look at siblings of the message element (toolbar often sits below)
+        var nextEl = lastAssistantEl.nextElementSibling;
+        if (nextEl) {
+          var siblingBtns = nextEl.querySelectorAll('button, [role="button"]');
+          var combined = [];
+          for (var ci = 0; ci < candidates.length; ci++) combined.push(candidates[ci]);
+          for (var ci = 0; ci < siblingBtns.length; ci++) combined.push(siblingBtns[ci]);
+          candidates = combined;
         }
-        lastTextLength = result.textLen;
+
+        for (var bi = 0; bi < candidates.length; bi++) {
+          var el = candidates[bi];
+          var t = (el.textContent || '').toLowerCase().trim();
+          var attr = (el.getAttribute('aria-label') || '').toLowerCase();
+          var dataTestId = (el.getAttribute('data-testid') || '').toLowerCase();
+          // Check aria-label, data-testid, and text content for any action keyword
+          var combined = t + ' ' + attr + ' ' + dataTestId;
+          for (var ki = 0; ki < actionKeywords.length; ki++) {
+            if (combined.indexOf(actionKeywords[ki]) !== -1) {
+              // Response is complete! Extract the text
+              var textEl = lastAssistantEl.querySelector('${SEL.MESSAGE_TEXT}');
+              if (!textEl) return { done: false };
+              var children = textEl.querySelectorAll('div[dir]');
+              var text = '';
+              if (children.length > 0) {
+                text = Array.from(children).map(function(c) { return c.innerText || c.textContent || ''; }).join('');
+              } else {
+                text = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
+              }
+              if (text.length < 5) return { done: false };
+              return { done: true, text: text, method: 'action-btn' };
+            }
+          }
+        }
+
+        // Fallback: also check indicator is gone (support existing detection)
+        var textEl = lastAssistantEl.querySelector('${SEL.MESSAGE_TEXT}');
+        if (textEl) {
+          var hasIndicator = textEl.querySelector('${SEL.INDICATOR}') !== null || textEl.getAttribute('data-show-indicator') === 'true';
+          var children = textEl.querySelectorAll('div[dir]');
+          var text = '';
+          if (children.length > 0) {
+            text = Array.from(children).map(function(c) { return c.innerText || c.textContent || ''; }).join('');
+          } else {
+            text = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
+          }
+          if (text.length > 10 && !hasIndicator) {
+            return { done: true, text: text, method: 'no-indicator' };
+          }
+        }
+
+        return { done: false };
+      })()`);
+
+      if (result?.done) {
+        console.log('[Debug] Response complete (method: ' + (result.method || 'unknown') + ')');
+        return result.text || '';
       }
     }
 
@@ -332,9 +357,6 @@ class DoubaoClient {
         });
         console.log('File set via DOM.setFileInputFiles');
 
-        // Wait for upload to process (DOM.setFileInputFiles already fires change event internally)
-        console.log('Waiting for upload to complete...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
         return { success: true, method: 'setFileInputFiles' };
       } else {
         console.log('No file input element found, trying alternative approach...');
@@ -383,8 +405,6 @@ class DoubaoClient {
             files: [filePath],
             nodeId: queryResult2.nodeId
           });
-          console.log('File set via retry DOM.setFileInputFiles');
-          await new Promise(resolve => setTimeout(resolve, 3000));
           return { success: true, method: 'setFileInputFiles-retry' };
         }
       }
@@ -457,36 +477,17 @@ async function analyzeWithDoubao(screenshotBuffer, context = {}) {
     const verifyText = await client.evaluate(`document.querySelector('${SEL.INPUT}')?.value?.length || 0`);
     console.log('Input text length after inject:', verifyText);
 
-    await new Promise(resolve => setTimeout(resolve, 800));
-
     const clicked = await client.clickSend();
     console.log('Send clicked:', clicked);
     if (!clicked?.clicked) {
       throw new Error('Failed to click send button');
     }
 
-    // Debug: check message count after send
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const postDebug = await client.evaluate(`(function() {
-      var msgs = document.querySelectorAll('${SEL.MESSAGE}');
-      var info = { total: msgs.length, userCount: 0, msgs: [] };
-      msgs.forEach(function(m, i) {
-        var isUser = m.classList.contains('justify-end');
-        if (isUser) info.userCount++;
-        var textEl = m.querySelector('${SEL.MESSAGE_TEXT}');
-        var hasIndicator = textEl ? (textEl.querySelector('${SEL.INDICATOR}') !== null || textEl.getAttribute('data-show-indicator') === 'true') : false;
-        var textLen = textEl ? (textEl.innerText || textEl.textContent || '').length : 0;
-        info.msgs.push({ idx: i, isUser: isUser, hasIndicator: hasIndicator, textLen: textLen });
-      });
-      return info;
-    })()`);
-    console.log('After send debug:', JSON.stringify(postDebug));
-
     console.log('Waiting for Doubao response (timeout: ' + (context.timeout || 30000) + 'ms)...');
 
     // Wait for response
     const timeout = context.timeout || 30000;
-    const response = await client.waitForResponse(0, timeout);
+    const response = await client.waitForResponse(timeout);
 
     console.log('Doubao response received:', response?.substring(0, 100) + '...');
 
