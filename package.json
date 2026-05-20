@@ -1,0 +1,77 @@
+{
+  "name": "opencli-assistant",
+  "version": "1.0.0",
+  "description": "OpenCLI Smart Assistant - AI-powered code and document completion",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "rebuild": "electron-rebuild -v 28.0.0",
+    "postinstall": "electron-rebuild -v 28.0.0",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "keywords": [
+    "electron",
+    "opencli",
+    "assistant",
+    "ai",
+    "doubao",
+    "code-completion"
+  ],
+  "author": "OpenCLI",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "screenshot-desktop": "^1.15.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-rebuild": "^3.2.9"
+  },
+  "build": {
+    "appId": "com.opencli.assistant",
+    "productName": "OpenCLI Assistant",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "core/**/*",
+      "renderer/**/*",
+      "config.json",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "icon": "assets/icon.png",
+      "category": "Development"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
