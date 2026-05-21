@@ -12,7 +12,7 @@ const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, c
 const path = require('path');
 const Store = require('electron-store');
 const { takeScreenshot } = require('./core/screenshot');
-const { pasteText, getText } = require('./core/clipboard-pure');
+const { pasteText, StreamingPaster, getText } = require('./core/clipboard-pure');
 const { detectActiveWindow } = require('./core/context-analyzer');
 const AgentRegistry = require('./core/agent-manager/registry');
 const DoubaoAppAdapter = require('./core/agent-manager/agents/doubao-app-adapter');
@@ -169,6 +169,7 @@ async function handleShortcut() {
   }
 
   isProcessing = true;
+  let streamingPaster = null;
 
   try {
     // Update tray menu
@@ -198,7 +199,7 @@ async function handleShortcut() {
       }
     }
 
-    // 4. Analyze with selected AI Agent
+    // 4. Analyze with selected AI Agent (with optional streaming)
     const agent = AgentRegistry.getSelected();
     console.log('Analyzing with agent:', agent ? agent.id : 'none');
 
@@ -206,29 +207,46 @@ async function handleShortcut() {
       throw new Error('No AI Agent selected. Please configure an agent in Settings.');
     }
 
-    const result = await agent.analyze(screenshotBuffer, {
+    // Prepare streaming paster if auto-insert is enabled
+    const shouldAutoInsert = store.get('auto_insert');
+    const storedMode = store.get('response_mode');
+    console.log('[Main] stored response_mode:', JSON.stringify(storedMode), '| default fallback:', storedMode || 'sse-fetch');
+    const context = {
       appName: activeWindow.title,
       timeout: store.get('timeout_seconds') * 1000,
       customPrompt: customPrompt,
-      responseMode: store.get('response_mode') || 'sse-fetch',
-    });
+      responseMode: storedMode || 'sse-fetch',
+    };
 
-    console.log('Analysis result:', result);
+    if (shouldAutoInsert) {
+      streamingPaster = new StreamingPaster();
+      await streamingPaster.start();
 
-    // 4. Auto insert if enabled
-    if (store.get('auto_insert') && result.text) {
-      console.log('Inserting text...');
-      
-      // Minimize our window to return focus to user's app
+      // Minimize our window so streaming pastes go to user's app
       if (mainWindow && mainWindow.isVisible()) {
         mainWindow.minimize();
       }
-      
-      // Wait for focus to switch back to user's app
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      await pasteText(result.text);
-      
+
+      context.onChunk = (incrementalText) => {
+        streamingPaster.push(incrementalText);
+      };
+    }
+
+    const result = await agent.analyze(screenshotBuffer, context);
+    console.log('Analysis result:', result);
+
+    // 5. Finish streaming or finalize paste
+    if (shouldAutoInsert && streamingPaster) {
+      await streamingPaster.finish();
+      console.log('Streaming paste completed');
+
+      // Safety fallback: if no text was streamed (onChunk never triggered),
+      // copy full text to clipboard so user can manually paste
+      if (!result.text) {
+        console.warn('[Streaming] Empty analysis result');
+      }
+
       showNotification('Success', 'Text inserted successfully');
     } else {
       // Copy to clipboard for manual paste
@@ -244,7 +262,12 @@ async function handleShortcut() {
   } catch (error) {
     console.error('Error in shortcut handler:', error);
     showNotification('Error', error.message || 'Failed to process request');
-    
+
+    // Restore clipboard even on error
+    if (streamingPaster) {
+      try { await streamingPaster.finish(); } catch { /* ignore cleanup errors */ }
+    }
+
     if (mainWindow) {
       mainWindow.webContents.send('error', error.message);
     }
