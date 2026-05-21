@@ -20,6 +20,10 @@ let prompts = [];
 let selectedPromptId = 'system-default';
 let editingPromptId = null;
 
+// Agent state
+let agents = [];
+let selectedAgentId = null;
+
 // Prompt DOM Elements
 const promptsList = document.getElementById('promptsList');
 const addPromptBtn = document.getElementById('addPromptBtn');
@@ -47,6 +51,9 @@ async function init() {
   // Load prompt management
   await loadPrompts();
   
+  // Load agents
+  await loadAgents();
+  
   addLog('Application initialized', 'info');
 }
 
@@ -73,6 +80,9 @@ function setupEventListeners() {
   
   // Prompt management
   setupPromptEventListeners();
+  
+  // Agent management
+  setupAgentEventListeners();
 }
 
 async function triggerAssistant() {
@@ -365,6 +375,129 @@ async function savePrompt() {
   renderPrompts();
   
   addLog('Prompt saved: ' + name, 'success');
+}
+
+// ===== Agent Management =====
+
+const agentsList = document.getElementById('agentsList');
+
+function setupAgentEventListeners() {
+  // No specific button listeners needed - agents are click-to-select
+}
+
+async function loadAgents() {
+  try {
+    var result = await window.electronAPI.getAgents();
+    agents = result.agents || [];
+    selectedAgentId = result.selectedId;
+    renderAgents();
+  } catch (error) {
+    addLog('Failed to load agents: ' + error.message, 'error');
+  }
+}
+
+function renderAgents() {
+  agentsList.innerHTML = '';
+
+  if (agents.length === 0) {
+    agentsList.innerHTML = '<p class="placeholder">No AI Agents configured.</p>';
+    return;
+  }
+
+  for (var i = 0; i < agents.length; i++) {
+    var a = agents[i];
+    var isSelected = a.id === selectedAgentId;
+
+    var item = document.createElement('div');
+    item.className = 'agent-item' + (isSelected ? ' selected' : '');
+    item.dataset.agentId = a.id;
+
+    var typeLabel = a.type === 'electron' ? 'Desktop' : 'Web';
+
+    item.innerHTML =
+      '<div class="agent-item-radio">' + (isSelected ? '&#9679;' : '&#9675;') + '</div>' +
+      '<div class="agent-item-info">' +
+      '  <div class="agent-item-header">' +
+      '    <div class="agent-item-name">' + escapeHtml(a.name) + '</div>' +
+      '    <span class="agent-item-type">' + typeLabel + '</span>' +
+      '  </div>' +
+      '  <div class="agent-item-endpoint">' + escapeHtml(a.endpoint) + '</div>' +
+      '  <div class="agent-item-status" id="agent-status-' + a.id + '"></div>' +
+      '</div>' +
+      '<div class="agent-item-actions">' +
+      '  <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">Test</button>' +
+      '</div>';
+
+    // Click to select agent
+    item.addEventListener('click', (function(agentId) {
+      return async function() {
+        await selectAgent(agentId);
+      };
+    })(a.id));
+
+    agentsList.appendChild(item);
+  }
+
+  // Attach test button handlers
+  var testBtns = agentsList.querySelectorAll('.test-btn');
+  for (var j = 0; j < testBtns.length; j++) {
+    (function(btn) {
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        var agentId = btn.dataset.agentId;
+        await testAgentConnection(agentId);
+      });
+    })(testBtns[j]);
+  }
+}
+
+async function selectAgent(id) {
+  try {
+    var result = await window.electronAPI.selectAgent(id);
+    if (result.success) {
+      selectedAgentId = id;
+      renderAgents();
+      var found = agents.find(function(a) { return a.id === id; });
+      addLog('Selected agent: ' + (found ? found.name : id), 'info');
+    } else {
+      addLog('Failed to select agent: ' + id, 'error');
+    }
+  } catch (error) {
+    addLog('Error selecting agent: ' + error.message, 'error');
+  }
+}
+
+async function testAgentConnection(id) {
+  var statusEl = document.getElementById('agent-status-' + id);
+  if (statusEl) {
+    statusEl.className = 'agent-item-status testing';
+    statusEl.textContent = 'Testing...';
+  }
+
+  addLog('Testing connection for agent: ' + id + '...', 'info');
+
+  try {
+    var result = await window.electronAPI.testAgentConnection(id);
+    if (result.success) {
+      if (statusEl) {
+        statusEl.className = 'agent-item-status connected';
+        statusEl.textContent = 'Connected' + (result.title ? ' (' + result.title + ')' : '');
+      }
+      addLog('Agent connected: ' + id, 'success');
+    } else {
+      if (statusEl) {
+        statusEl.className = 'agent-item-status disconnected';
+        statusEl.textContent = 'Disconnected';
+      }
+      addLog('Agent connection failed: ' + id + ' - ' + (result.error || 'Unknown error'), 'error');
+    }
+  } catch (error) {
+    if (statusEl) {
+      statusEl.className = 'agent-item-status disconnected';
+      statusEl.textContent = 'Error';
+    }
+    addLog('Error testing agent connection: ' + error.message, 'error');
+  }
 }
 
 // Start

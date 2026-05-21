@@ -19,3 +19,6 @@ Thumbs.db
 
 # Config
 config.local.json
+
+# OpenCLI source reference (for architecture reference only)
+opencli-source/

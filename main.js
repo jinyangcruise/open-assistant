@@ -12,15 +12,20 @@ const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, c
 const path = require('path');
 const Store = require('electron-store');
 const { takeScreenshot } = require('./core/screenshot');
-const { analyzeWithDoubao } = require('./core/doubao-client');
 const { pasteText, getText } = require('./core/clipboard-pure');
 const { detectActiveWindow } = require('./core/context-analyzer');
+const AgentRegistry = require('./core/agent-manager/registry');
+const DoubaoAppAdapter = require('./core/agent-manager/agents/doubao-app-adapter');
 
 // Initialize store for persistent config
 const store = new Store({
   name: 'opencli-assistant-config',
   defaults: require('./config.json')
 });
+
+// Initialize Agent Registry
+AgentRegistry.init(store);
+AgentRegistry.register(new DoubaoAppAdapter());
 
 let mainWindow;
 let tray;
@@ -193,9 +198,15 @@ async function handleShortcut() {
       }
     }
 
-    // 4. Analyze with Doubao
-    console.log('Analyzing with Doubao...');
-    const result = await analyzeWithDoubao(screenshotBuffer, {
+    // 4. Analyze with selected AI Agent
+    const agent = AgentRegistry.getSelected();
+    console.log('Analyzing with agent:', agent ? agent.id : 'none');
+
+    if (!agent) {
+      throw new Error('No AI Agent selected. Please configure an agent in Settings.');
+    }
+
+    const result = await agent.analyze(screenshotBuffer, {
       appName: activeWindow.title,
       timeout: store.get('timeout_seconds') * 1000,
       customPrompt: customPrompt
@@ -335,6 +346,27 @@ function setupIpcHandlers() {
     store.set('selected_prompt_id', id);
     return { selectedId: id };
   });
+
+  // --- Agent Management ---
+
+  // Get all agents with current selection
+  ipcMain.handle('get-agents', () => {
+    return {
+      agents: AgentRegistry.getAll(),
+      selectedId: AgentRegistry.getSelected()?.id || null
+    };
+  });
+
+  // Select an agent
+  ipcMain.handle('select-agent', (event, id) => {
+    const success = AgentRegistry.setSelected(id);
+    return { success };
+  });
+
+  // Test agent connection
+  ipcMain.handle('test-agent-connection', async (event, id) => {
+    return await AgentRegistry.testConnection(id);
+  });
 }
 
 // App lifecycle
@@ -360,6 +392,11 @@ app.on('window-all-closed', (e) => {
 app.on('will-quit', () => {
   // Unregister all shortcuts
   globalShortcut.unregisterAll();
+  // Disconnect any active agent connections
+  AgentRegistry.getAll().forEach(a => {
+    const agent = AgentRegistry.getAgent(a.id);
+    if (agent) agent.disconnect();
+  });
 });
 
 app.on('activate', () => {

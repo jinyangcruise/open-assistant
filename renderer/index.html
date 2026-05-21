@@ -43,9 +43,9 @@
           </div>
 
           <div class="form-group">
-            <label for="cdpEndpoint">Doubao CDP Endpoint</label>
+            <label for="cdpEndpoint">CDP Endpoint</label>
             <input type="text" id="cdpEndpoint" name="doubao_cdp_endpoint" placeholder="http://127.0.0.1:9225">
-            <span class="help-text">CDP endpoint for Doubao App (requires --remote-debugging-port)</span>
+            <span class="help-text">CDP endpoint for connected desktop app (requires --remote-debugging-port)</span>
           </div>
 
           <div class="form-group">
@@ -118,9 +118,20 @@
         </div>
       </section>
 
+      <!-- Agent Management Section -->
+      <section class="agents-section">
+        <h2>AI Agent</h2>
+        <div class="agents-info">
+          <span class="help-text">Select which AI agent to use for screen analysis</span>
+        </div>
+        <div id="agentsList" class="agents-list">
+          <!-- Rendered by renderer.js -->
+        </div>
+      </section>
+
       <!-- Results Section -->
       <section class="results-section">
-        <h2>📊 Last Result</h2>
+        <h2>Last Result</h2>
         <div id="resultContainer" class="result-container">
           <p class="placeholder">No results yet. Trigger the assistant to see results here.</p>
         </div>
