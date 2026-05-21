@@ -81,12 +81,21 @@
           </div>
 
           <div class="form-group">
-            <label for="responseMode">Response Mode</label>
+            <label for="responseMode">Capture Mode</label>
             <select id="responseMode" name="response_mode">
-              <option value="sse-fetch">SSE Fetch (fast, works when minimized)</option>
-              <option value="dom-poll">DOM Poll (legacy, reliable)</option>
+              <option value="sse-fetch">SSE Fetch (推荐，窗口关闭到托盘也能用)</option>
+              <option value="dom-poll">DOM Poll (需要聊天窗口可见)</option>
             </select>
-            <span class="help-text">SSE Fetch intercepts the AI response at browser level. DOM Poll checks the page periodically.</span>
+            <span class="help-text">SSE Fetch 在浏览器层面截获 AI 回复，窗口关闭到托盘时也能正常工作。DOM Poll 通过页面 DOM 轮询获取回复，需要窗口保持可见。</span>
+          </div>
+
+          <div class="form-group">
+            <label for="outputMode">Output Mode</label>
+            <select id="outputMode" name="output_mode">
+              <option value="streaming">Streaming (逐段流式粘贴)</option>
+              <option value="full">Full (完整获取后一次性粘贴)</option>
+            </select>
+            <span class="help-text">Streaming 将 AI 回复按生成顺序逐段粘贴到目标应用。Full 等待完整回复后一次性粘贴。</span>
           </div>
 
           <div class="form-actions">

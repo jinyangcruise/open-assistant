@@ -74,6 +74,15 @@ class BaseAgent {
   }
 
   /**
+   * Expose the CDP bridge for direct CDP command access.
+   * Used by SSE Fetch mode to send Fetch.enable, Fetch.getResponseBody, etc.
+   * @returns {Object|null} CDPBridge instance
+   */
+  getBridge() {
+    return this._bridge;
+  }
+
+  /**
    * Test if the CDP endpoint is reachable and responsive
    * @returns {Promise<{success: boolean, error?: string}>}
    */

@@ -207,10 +207,11 @@ async function handleShortcut() {
       throw new Error('No AI Agent selected. Please configure an agent in Settings.');
     }
 
-    // Prepare streaming paster if auto-insert is enabled
+    // Prepare output based on output_mode and auto_insert settings
     const shouldAutoInsert = store.get('auto_insert');
     const storedMode = store.get('response_mode');
-    console.log('[Main] stored response_mode:', JSON.stringify(storedMode), '| default fallback:', storedMode || 'sse-fetch');
+    const outputMode = store.get('output_mode') || 'streaming';
+    console.log('[Main] stored response_mode:', JSON.stringify(storedMode), 'output_mode:', outputMode, '| default fallback: sse-fetch / streaming');
     const context = {
       appName: activeWindow.title,
       timeout: store.get('timeout_seconds') * 1000,
@@ -219,35 +220,46 @@ async function handleShortcut() {
     };
 
     if (shouldAutoInsert) {
-      streamingPaster = new StreamingPaster();
-      await streamingPaster.start();
+      if (outputMode === 'streaming') {
+        // === STREAMING OUTPUT ===
+        streamingPaster = new StreamingPaster();
+        await streamingPaster.start();
 
-      // Minimize our window so streaming pastes go to user's app
-      if (mainWindow && mainWindow.isVisible()) {
-        mainWindow.minimize();
+        // Minimize our window so streaming pastes go to user's app
+        if (mainWindow && mainWindow.isVisible()) {
+          mainWindow.minimize();
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        context.onChunk = (incrementalText) => {
+          streamingPaster.push(incrementalText);
+        };
       }
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      context.onChunk = (incrementalText) => {
-        streamingPaster.push(incrementalText);
-      };
+      // Full output mode: no onChunk — analyze returns complete text,
+      // we'll paste it all at once after receiving the result.
     }
 
     const result = await agent.analyze(screenshotBuffer, context);
     console.log('Analysis result:', result);
 
-    // 5. Finish streaming or finalize paste
-    if (shouldAutoInsert && streamingPaster) {
-      await streamingPaster.finish();
-      console.log('Streaming paste completed');
+    // 5. Output result
+    if (shouldAutoInsert) {
+      if (outputMode === 'streaming' && streamingPaster) {
+        // Finish streaming paste
+        await streamingPaster.finish();
+        console.log('Streaming paste completed');
 
-      // Safety fallback: if no text was streamed (onChunk never triggered),
-      // copy full text to clipboard so user can manually paste
-      if (!result.text) {
-        console.warn('[Streaming] Empty analysis result');
+        if (!result.text) {
+          console.warn('[Streaming] Empty analysis result');
+        }
+
+        showNotification('Success', 'Text inserted successfully');
+      } else if (outputMode === 'full') {
+        // Full output: paste complete text at once
+        await pasteText(result.text);
+        console.log('Full paste completed');
+        showNotification('Success', 'Text inserted successfully');
       }
-
-      showNotification('Success', 'Text inserted successfully');
     } else {
       // Copy to clipboard for manual paste
       clipboard.writeText(result.text);

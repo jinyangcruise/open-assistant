@@ -7,6 +7,7 @@
   "max_response_length": 2000,
   "show_notifications": true,
   "response_mode": "sse-fetch",
+  "output_mode": "streaming",
   "log_level": "info",
   "prompts": [],
   "selected_prompt_id": "system-default",
