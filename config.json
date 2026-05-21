@@ -6,6 +6,7 @@
   "screenshot_region": "full",
   "max_response_length": 2000,
   "show_notifications": true,
+  "response_mode": "sse-fetch",
   "log_level": "info",
   "prompts": [],
   "selected_prompt_id": "system-default",

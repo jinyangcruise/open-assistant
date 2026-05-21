@@ -80,6 +80,15 @@
             </select>
           </div>
 
+          <div class="form-group">
+            <label for="responseMode">Response Mode</label>
+            <select id="responseMode" name="response_mode">
+              <option value="sse-fetch">SSE Fetch (fast, works when minimized)</option>
+              <option value="dom-poll">DOM Poll (legacy, reliable)</option>
+            </select>
+            <span class="help-text">SSE Fetch intercepts the AI response at browser level. DOM Poll checks the page periodically.</span>
+          </div>
+
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Configuration</button>
             <button type="button" id="resetBtn" class="btn btn-secondary">Reset to Defaults</button>

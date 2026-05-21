@@ -1,10 +1,13 @@
 /**
  * DoubaoAppAdapter - AI Agent for Doubao Desktop App
  *
- * Uses OpenCLI's individual utils functions (injectTextScript, clickSendScript)
- * directly with a custom polling script that does NOT rely on message-count
- * comparison (beforeCount), since Doubao may reuse DOM containers on repeated
- * calls. Instead, it also compares the last assistant message text.
+ * Supports two response modes:
+ *   - 'sse-fetch' (default): Intercepts the SSE (text/event-stream) response from
+ *     Doubao's /chat/completion endpoint via CDP Fetch domain. Works at browser
+ *     process level, unaffected by renderer throttling when window is minimized.
+ *   - 'dom-poll': Legacy DOM polling using asr_btn presence as completion signal.
+ *
+ * Mode is configurable via config.json → response_mode field.
  */
 
 const path = require('path');
@@ -193,13 +196,212 @@ class DoubaoAppAdapter extends BaseAgent {
     return { success: false };
   }
 
+  // ===================================================================
+  //  SSE FETCH MODE — intercept /chat/completion via CDP Fetch domain
+  // ===================================================================
+
+  /**
+   * Parse SSE response body and extract the AI response text.
+   *
+   * Known SSE event types (discovered via CDP capture):
+   *   - SSE_HEARTBEAT         : keepalive
+   *   - SSE_ACK               : server acknowledged the user message
+   *   - FULL_MSG_NOTIFY       : full user message echo
+   *   - STREAM_MSG_NOTIFY     : first chunk of AI streaming response
+   *   - CHUNK_DELTA           : text delta — partial AI response text
+   *   - STREAM_CHUNK          : full patch operation (includes is_finish flag)
+   *   - SSE_REPLY_END (type=1): message finished, has msg_finish_attr.brief
+   *   - SSE_REPLY_END (type=2): answer finished (has_suggest etc.)
+   *   - SSE_REPLY_END (type=3): final end signal
+   *
+   * @param {string} body - Raw SSE response body
+   * @returns {{ text: string, isComplete: boolean }}
+   */
+  _parseSSEText(body) {
+    if (!body) return { text: '', isComplete: false };
+
+    const textParts = [];
+    let isComplete = false;
+    let briefText = '';
+
+    // Split SSE events by double newline
+    const events = body.split('\n\n');
+
+    for (const event of events) {
+      const lines = event.trim().split('\n');
+      let eventType = 'message';
+      let dataStr = '';
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          dataStr += line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          dataStr += line.slice(5).trim();
+        }
+      }
+
+      if (!dataStr) continue;
+
+      switch (eventType) {
+        case 'CHUNK_DELTA': {
+          // {"text":"北"}
+          try {
+            const delta = JSON.parse(dataStr);
+            if (delta.text) textParts.push(delta.text);
+          } catch { /* skip malformed */ }
+          break;
+        }
+
+        case 'STREAM_MSG_NOTIFY': {
+          // First streaming chunk: content.content_block[0].content.text_block.text
+          try {
+            const msg = JSON.parse(dataStr);
+            const blocks = msg.content?.content_block || [];
+            if (blocks[0]?.content?.text_block?.text) {
+              textParts.push(blocks[0].content.text_block.text);
+            }
+          } catch { /* skip */ }
+          break;
+        }
+
+        case 'SSE_REPLY_END': {
+          // end_type=1: msg_finish_attr.brief = complete response summary
+          // end_type=3: final end signal
+          try {
+            const endInfo = JSON.parse(dataStr);
+            if (endInfo.end_type === 1 && endInfo.msg_finish_attr?.brief) {
+              briefText = endInfo.msg_finish_attr.brief;
+            }
+            if (endInfo.end_type === 3) {
+              isComplete = true;
+            }
+          } catch { /* skip */ }
+          break;
+        }
+      }
+    }
+
+    // Build full text: prefer CHUNK_DELTA concatenation, fall back to brief
+    let fullText = textParts.join('').trim();
+    if (!fullText && briefText) {
+      fullText = briefText;
+    }
+
+    return { text: fullText, isComplete };
+  }
+
+  /**
+   * Capture Doubao's AI response via CDP Fetch domain SSE interception.
+   *
+   * How it works:
+   * 1. Enable Fetch domain with pattern for ending with /chat/completion at Response stage
+   * 2. When the request is paused, call Fetch.getResponseBody to get the SSE body
+   * 3. Parse the SSE body to extract AI response text (from CHUNK_DELTA events)
+   * 4. Detect completion from SSE_REPLY_END events
+   * 5. Continue the response and return the extracted text
+   *
+   * This works at browser process level, unaffected by renderer throttling,
+   * making it suitable for the window-minimized scenario.
+   *
+   * @param {Object} page - CDPPage instance
+   * @param {string} beforeLastText - assistant text BEFORE sending the new message
+   * @param {number} timeout - max wait time in ms
+   * @returns {Promise<string>} Captured response text
+   */
+  async _captureSSEResponse(page, beforeLastText, timeout) {
+    const bridge = this._bridge;
+    if (!bridge) throw new Error('CDP bridge not available');
+
+    // Enable Fetch domain with pattern for completion endpoint
+    await bridge.send('Fetch.enable', {
+      patterns: [
+        {
+          urlPattern: '*chat/completion*',
+          requestStage: 'Response',
+        },
+      ],
+    });
+
+    return new Promise((resolve, reject) => {
+      let resolved = false;
+      let fullText = '';
+
+      const timer = setTimeout(() => {
+        cleanup();
+        if (fullText) {
+          resolve(fullText);
+        } else {
+          reject(new Error('SSE capture timeout'));
+        }
+      }, timeout);
+
+      const handler = async (p) => {
+        if (resolved) return;
+        const requestId = p.requestId;
+
+        try {
+          const bodyResult = await bridge.send('Fetch.getResponseBody', {
+            requestId,
+          });
+
+          // Decode body
+          const body = bodyResult?.body
+            ? (bodyResult.base64Encoded
+                ? Buffer.from(bodyResult.body, 'base64').toString('utf-8')
+                : bodyResult.body)
+            : '';
+
+          // Parse SSE text
+          const { text, isComplete } = this._parseSSEText(body);
+
+          if (text) fullText = text;
+
+          // Continue the response to the page
+          try {
+            await bridge.send('Fetch.continueResponse', { requestId });
+          } catch { /* page may not need it anymore */ }
+
+          if (isComplete && fullText) {
+            resolved = true;
+            cleanup();
+            resolve(fullText);
+          } else if (isComplete) {
+            // SSE complete but no text extracted — resolve with what we have
+            resolved = true;
+            cleanup();
+            resolve(fullText || '');
+          }
+          // If not complete yet, keep waiting (body might grow)
+          // We'll resolve on timeout with whatever text we have
+        } catch (err) {
+          // getResponseBody might fail for streaming response
+          // Continue the response and fall through
+          try {
+            await bridge.send('Fetch.continueResponse', { requestId });
+          } catch { /* ignore */ }
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        bridge.off('Fetch.requestPaused', handler);
+        bridge.send('Fetch.disable').catch(() => {});
+      };
+
+      bridge.on('Fetch.requestPaused', handler);
+    });
+  }
+
+  // ===================================================================
+  //  DOM POLL MODE — legacy asr_btn-based polling
+  // ===================================================================
+
   /**
    * Fast poll script — returns current state of Doubao's chat page.
    *
-   * Returns structured data so the Node.js loop can make decisions about
-   * idle timeout, completion detection, etc.
-   *
-   * Completion signal (as identified via DevTools inspection):
+   * Completion signal:
    * - hasAsrBtn → true: voice button visible = idle OR generation complete
    *   During generation, `asr_btn` element is REMOVED from the DOM and
    *   replaced by a send-btn-wrapper. When generation finishes, the
@@ -235,17 +437,72 @@ class DoubaoAppAdapter extends BaseAgent {
   }
 
   /**
-   * Analyze a screenshot using Doubao.
+   * Poll Doubao's DOM until the response is ready.
    *
-   * Polling strategy (asr_btn-based):
-   * - 200ms polling interval for near-instant response detection
-   * - Primary completion: `[data-testid="asr_btn"]` reappears (voice button)
-   *   This element is removed during generation and restored when done.
-   * - Fallback: idle timeout (1.5s no output change) → assume complete
-   * - Safety limit: user-configured timeout (context.timeout)
+   * Strategy:
+   * - 200ms polling interval
+   * - Primary completion: asr_btn reappears (voice button)
+   * - Fallback: idle timeout (no output change for 1.5s)
+   * - Safety limit: user-configured timeout
+   *
+   * @param {Object} page - CDPPage instance
+   * @param {string} beforeLastText - assistant text BEFORE sending
+   * @param {number} timeout - max wait time in ms
+   * @returns {Promise<string>} Response text
+   */
+  async _pollDomResponse(page, beforeLastText, timeout) {
+    const POLL_MS = 200;
+    const IDLE_TIMEOUT_MS = Math.min(1500, Math.floor(timeout / 3));
+
+    let lastText = beforeLastText;
+    let idleMs = 0;
+    let totalMs = 0;
+    let hasNewText = false;
+
+    while (totalMs < timeout) {
+      await sleep(POLL_MS / 1000);
+      totalMs += POLL_MS;
+
+      const result = await page.evaluate(
+        this._buildFastPollScript(beforeLastText),
+      );
+      if (!result) continue;
+
+      // --- Detect new text → reset idle timer ---
+      if (result.text && result.text !== lastText) {
+        lastText = result.text;
+        idleMs = 0;
+        hasNewText = true;
+      } else {
+        idleMs += POLL_MS;
+      }
+
+      // --- PRIMARY COMPLETION: asr_btn reappeared → generation done ---
+      if (hasNewText && result.text && result.hasAsrBtn) {
+        return result.text;
+      }
+
+      // --- FALLBACK: idle timeout → no new output for a while ---
+      if (hasNewText && idleMs >= IDLE_TIMEOUT_MS) {
+        return result.text || '';
+      }
+    }
+
+    throw new Error(`豆包未在 ${timeout / 1000} 秒内返回回复`);
+  }
+
+  // ===================================================================
+  //  Main analyze method — dispatches to selected mode
+  // ===================================================================
+
+  /**
+   * Analyze a screenshot using Doubao.
    *
    * @param {Buffer} screenshotBuffer - PNG screenshot buffer
    * @param {Object} context - Analysis context
+   * @param {string} [context.responseMode] - 'sse-fetch' or 'dom-poll'
+   * @param {number} [context.timeout] - Timeout in ms
+   * @param {string} [context.customPrompt] - Custom prompt override
    * @returns {Promise<Object>} Analysis result
    */
   async analyze(screenshotBuffer, context = {}) {
@@ -303,76 +560,79 @@ class DoubaoAppAdapter extends BaseAgent {
 
       await sleep(0.5);
 
-      // 8. Click send button (fallback: Enter key)
-      const clicked = await page.evaluate(clickSendScript());
-      if (!clicked) {
-        await page.pressKey('Enter');
-      }
-
-      // ---------------------------------------------------------------
-      // 9. Idle-timeout based polling
-      //
-      //    Detection logic:
-      //      1. Text changes → reset idle timer
-      //      2. asr_btn reappears (!hasAsrBtn → true) → generation done
-      //         The asr_btn (voice button) is REMOVED from the DOM during
-      //         generation and RESTORED when done.
-      //      3. Idle timeout (no new text for 1.5s) → fallback
-      // ---------------------------------------------------------------
+      // Determine response mode
+      const mode = context.responseMode || 'sse-fetch';
       const userTimeout = context.timeout || 30000;
-      const MAX_TOTAL_MS = userTimeout;
-      const IDLE_TIMEOUT_MS = Math.min(1500, Math.floor(MAX_TOTAL_MS / 3));
-      const POLL_MS = 200;
 
-      let lastText = beforeLastText;
-      let idleMs = 0;
-      let totalMs = 0;
-      let hasNewText = false;
-      let response = '';
+      if (mode === 'sse-fetch') {
+        // =============================================================
+        // SSE FETCH MODE
+        //
+        // Set up Fetch interception BEFORE clicking send, so we capture
+        // the /chat/completion request. The Fetch domain works at browser
+        // process level, making it suitable for window-minimized scenario.
+        // =============================================================
 
-      while (totalMs < MAX_TOTAL_MS) {
-        await sleep(POLL_MS / 1000);
-        totalMs += POLL_MS;
-
-        const result = await page.evaluate(
-          this._buildFastPollScript(beforeLastText),
+        // Set up Fetch interception (will activate on send)
+        const ssePromise = this._captureSSEResponse(
+          page, beforeLastText, userTimeout,
         );
-        if (!result) continue;
 
-        // --- Detect new text → reset idle timer ---
-        if (result.text && result.text !== lastText) {
-          lastText = result.text;
-          idleMs = 0;
-          hasNewText = true;
-        } else {
-          idleMs += POLL_MS;
+        // Click send (triggers the /chat/completion request)
+        const clicked = await page.evaluate(clickSendScript());
+        if (!clicked) {
+          await page.pressKey('Enter');
         }
 
-        // --- PRIMARY COMPLETION: asr_btn reappeared → generation done ---
-        // During generation, `[data-testid="asr_btn"]` is removed from the
-        // DOM. When generation finishes, it's restored (voice button).
-        if (hasNewText && result.text && result.hasAsrBtn) {
-          response = result.text;
-          break;
+        // Wait for SSE capture
+        let response;
+        try {
+          response = await ssePromise;
+        } catch (sseErr) {
+          // SSE capture failed, fall back to DOM polling
+          console.warn(
+            '[DoubaoAdapter] SSE capture failed, falling back to DOM poll:',
+            sseErr.message,
+          );
+          response = await this._pollDomResponse(
+            page, beforeLastText, userTimeout,
+          );
         }
 
-        // --- FALLBACK: idle timeout → no new output for a while ---
-        if (hasNewText && idleMs >= IDLE_TIMEOUT_MS) {
-          response = result.text;
-          break;
+        if (!response) {
+          throw new Error(`豆包未在 ${userTimeout / 1000} 秒内返回回复`);
         }
+
+        return {
+          text: response,
+          type: this._analyzeContentType(response),
+          timestamp: new Date().toISOString(),
+          agentId: this.id,
+        };
+      } else {
+        // =============================================================
+        // DOM POLL MODE (legacy)
+        //
+        // Click send first, then poll DOM for asr_btn reappearance.
+        // =============================================================
+
+        // Click send button (fallback: Enter key)
+        const clicked = await page.evaluate(clickSendScript());
+        if (!clicked) {
+          await page.pressKey('Enter');
+        }
+
+        const response = await this._pollDomResponse(
+          page, beforeLastText, userTimeout,
+        );
+
+        return {
+          text: response,
+          type: this._analyzeContentType(response),
+          timestamp: new Date().toISOString(),
+          agentId: this.id,
+        };
       }
-
-      if (!response) {
-        throw new Error(`豆包未在 ${userTimeout / 1000} 秒内返回回复`);
-      }
-
-      return {
-        text: response,
-        type: this._analyzeContentType(response),
-        timestamp: new Date().toISOString(),
-        agentId: this.id,
-      };
     } finally {
       this._cleanupTempFile(tmpFile);
     }

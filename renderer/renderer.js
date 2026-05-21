@@ -146,6 +146,7 @@ function populateForm(config) {
   document.getElementById('autoInsert').checked = config.auto_insert !== false;
   document.getElementById('showNotifications').checked = config.show_notifications !== false;
   document.getElementById('logLevel').value = config.log_level || 'info';
+  document.getElementById('responseMode').value = config.response_mode || 'sse-fetch';
   
   shortcutDisplay.textContent = (config.shortcut || 'Control+Space').replace('Control', 'Ctrl');
 }

@@ -209,7 +209,8 @@ async function handleShortcut() {
     const result = await agent.analyze(screenshotBuffer, {
       appName: activeWindow.title,
       timeout: store.get('timeout_seconds') * 1000,
-      customPrompt: customPrompt
+      customPrompt: customPrompt,
+      responseMode: store.get('response_mode') || 'sse-fetch',
     });
 
     console.log('Analysis result:', result);
