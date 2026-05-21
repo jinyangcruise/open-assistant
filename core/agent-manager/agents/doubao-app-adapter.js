@@ -1,12 +1,14 @@
 /**
  * DoubaoAppAdapter - AI Agent for Doubao Desktop App
  *
- * Uses OpenCLI's built-in doubao-app adapter for the core interaction
- * (text injection → send → response polling), with custom screenshot
- * upload logic that OpenCLI doesn't natively support.
+ * Uses OpenCLI's individual utils functions (injectTextScript, clickSendScript)
+ * directly with a custom polling script that does NOT rely on message-count
+ * comparison (beforeCount), since Doubao may reuse DOM containers on repeated
+ * calls. Instead, it also compares the last assistant message text.
  */
 
 const path = require('path');
+const http = require('http');
 const BaseAgent = require('../base-agent');
 
 // ---------------------------------------------------------------------------
@@ -14,36 +16,51 @@ const BaseAgent = require('../base-agent');
 // ---------------------------------------------------------------------------
 const SEL = {
   MESSAGE: '[data-testid="message_content"]',
+  MESSAGE_TEXT: '[data-testid="message_text_content"]',
+  INDICATOR: '[data-testid="indicator"]',
   INPUT: '[data-testid="chat_input_input"]',
 };
 
 const FILE_INPUT = 'input[type="file"]';
 
 // ---------------------------------------------------------------------------
+// CDP target listing helper
+// ---------------------------------------------------------------------------
+
+/** Fetch all CDP targets from the HTTP endpoint */
+function _fetchTargets(httpEndpoint) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(httpEndpoint.replace(/\/$/, '') + '/json');
+    http.get(url, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // OpenCLI module access helpers (file:// URL bypasses Node exports map)
 // ---------------------------------------------------------------------------
 
-/** Resolve the file:// URL for OpenCLI's installed doubao-app utils.js */
-function _resolveOpencliPath() {
-  const utilsPath = path.resolve(
-    __dirname,
-    '../../../node_modules/@jackwener/opencli/clis/doubao-app/utils.js',
-  );
-  return 'file:///' + utilsPath.replace(/\\/g, '/');
-}
-
-/** Lazy-load the ask command from OpenCLI's doubao-app adapter */
-let _askCommandPromise = null;
-async function _getAskCommand() {
-  if (!_askCommandPromise) {
-    const askPath = path.resolve(
+/** Lazy-load utils from OpenCLI's doubao-app adapter */
+let _utilsPromise = null;
+async function _getOpencliUtils() {
+  if (!_utilsPromise) {
+    const utilsPath = path.resolve(
       __dirname,
-      '../../../node_modules/@jackwener/opencli/clis/doubao-app/ask.js',
+      '../../../node_modules/@jackwener/opencli/clis/doubao-app/utils.js',
     );
-    const askUrl = 'file:///' + askPath.replace(/\\/g, '/');
-    _askCommandPromise = import(askUrl).then((m) => m.askCommand);
+    const utilsUrl = 'file:///' + utilsPath.replace(/\\/g, '/');
+    _utilsPromise = import(utilsUrl);
   }
-  return _askCommandPromise;
+  return _utilsPromise;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +89,14 @@ ${context.appName && context.appName !== 'Unknown' ? '当前应用: ' + context.
 }
 
 // ---------------------------------------------------------------------------
+// Simple sleep helper (avoids page.wait → waitForDomStableJs)
+// ---------------------------------------------------------------------------
+
+function sleep(seconds) {
+  return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+}
+
+// ---------------------------------------------------------------------------
 // DoubaoAppAdapter
 // ---------------------------------------------------------------------------
 
@@ -83,6 +108,62 @@ class DoubaoAppAdapter extends BaseAgent {
       type: 'electron',
       endpoint: 'http://127.0.0.1:9225',
     });
+  }
+
+  /**
+   * Ensure the connected page is on a Doubao chat page with a visible input.
+   * If connected to an internal/background page, find the real chat target
+   * and reconnect. Does NOT create new conversations.
+   * @param {Object} page - CDPPage instance (may be stale after reconnect)
+   * @returns {Promise<Object>} The (possibly reconnected) page
+   */
+  async _ensureChatPage(page) {
+    const currentUrl = await page.evaluate('window.location.href');
+
+    // If on an internal/background page, find the real chat target
+    if (!currentUrl ||
+        currentUrl.startsWith('chrome://') ||
+        currentUrl.startsWith('devtools://') ||
+        currentUrl === 'about:blank') {
+      const targets = await _fetchTargets(this.endpoint);
+      const chatTarget = targets.find((t) => {
+        const u = (t.url || '').toLowerCase();
+        return (
+          t.webSocketDebuggerUrl &&
+          !u.startsWith('chrome://') &&
+          !u.startsWith('devtools://') &&
+          !u.startsWith('about:') &&
+          u !== '' &&
+          (t.type === 'page' || t.type === 'webview' || t.type === 'app')
+        );
+      });
+
+      if (chatTarget) {
+        this.disconnect();
+        page = await this.connect(chatTarget.webSocketDebuggerUrl);
+      } else {
+        throw new Error(
+          `无法找到豆包聊天页面。连接到后台页面: "${currentUrl}"，` +
+          `且未找到其他可用的聊天页面目标。请确保豆包桌面端已打开。`,
+        );
+      }
+    }
+
+    // Wait for the chat input to appear (up to 8s)
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const hasInput = await page.evaluate(
+        `document.querySelector('${SEL.INPUT}') !== null`,
+      );
+      if (hasInput) return page;
+      await sleep(1);
+    }
+
+    const title = await page.evaluate('document.title');
+    const url = await page.evaluate('window.location.href');
+    throw new Error(
+      `无法找到豆包聊天输入框。页面标题: "${title}", URL: "${url}". ` +
+      `请确保豆包桌面端已打开且处于聊天页面。`,
+    );
   }
 
   /**
@@ -108,12 +189,65 @@ class DoubaoAppAdapter extends BaseAgent {
     } catch (err) {
       // File input not found or CDP command failed
     }
-
     return { success: false };
   }
 
   /**
-   * Analyze a screenshot using Doubao
+   * Check if a new assistant response is ready.
+   *
+   * Walks backwards through message containers and checks:
+   * 1. Whether the indicator (streaming cursor) is still visible
+   * 2. Whether the last assistant message text has changed from before
+   *
+   * IMPORTANT: We do NOT rely on nowCount > beforeCount here, because the
+   * user's own message also creates a new [data-testid="message_content"]
+   * container — so the count would increase before the assistant responds,
+   * causing us to return the stale old assistant text as "done".
+   *
+   * @param {number} beforeCount - message count before sending (kept for
+   *   possible future use, not used in the main check)
+   * @param {string} beforeLastText - text of the last assistant message
+   *   before sending
+   * @returns {string} evaluate script
+   */
+  _buildCustomPollScript(beforeCount, beforeLastText) {
+    const escapedText = JSON.stringify(beforeLastText);
+    return `(function() {
+      const containers = document.querySelectorAll('${SEL.MESSAGE}');
+      const hasIndicator = document.querySelector('${SEL.INDICATOR}') !== null;
+
+      // Walk backwards to find the last assistant message
+      let lastAssistantText = '';
+      for (let i = containers.length - 1; i >= 0; i--) {
+        const c = containers[i];
+        if (c.classList.contains('justify-end')) continue;
+        const textEl = c.querySelector('${SEL.MESSAGE_TEXT}');
+        if (!textEl) continue;
+        lastAssistantText = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
+        break;
+      }
+
+      // 1. Still streaming — indicator is visible
+      if (hasIndicator) return { phase: 'streaming' };
+
+      // 2. Assistant text has changed → new response is ready
+      if (lastAssistantText && lastAssistantText !== ${escapedText}) {
+        return { phase: 'done', text: lastAssistantText };
+      }
+
+      // 3. No change yet — keep waiting
+      return { phase: 'waiting' };
+    })()`;
+  }
+
+  /**
+   * Analyze a screenshot using Doubao.
+   *
+   * Uses OpenCLI's injectTextScript + clickSendScript for DOM interaction,
+   * but uses a custom polling script that checks BOTH message count AND
+   * last-assistant-text-change — so it works whether Doubao creates new
+   * DOM containers or reuses existing ones on repeated calls.
+   *
    * @param {Buffer} screenshotBuffer - PNG screenshot buffer
    * @param {Object} context - Analysis context
    * @returns {Promise<Object>} Analysis result
@@ -123,35 +257,81 @@ class DoubaoAppAdapter extends BaseAgent {
     let tmpFile = null;
 
     try {
-      // 1. Connect to Doubao CDP
+      // 1. Connect to Doubao CDP (reuses existing connection if available)
       page = await this.connect();
 
-      // 2. Save screenshot to temp file and upload
-      tmpFile = this._saveTempScreenshot(screenshotBuffer);
-      const uploadResult = await this._uploadScreenshot(page, tmpFile);
+      // 2. Ensure we're on a proper chat page
+      page = await this._ensureChatPage(page);
 
-      // 3. Build the prompt
-      const hasScreenshot = uploadResult.success;
+      // 3. Save screenshot and upload
+      tmpFile = this._saveTempScreenshot(screenshotBuffer);
+      await this._uploadScreenshot(page, tmpFile);
+
+      // 4. Build the prompt
+      const hasScreenshot = true;
       const prompt =
         context.customPrompt && context.customPrompt.trim()
           ? context.customPrompt.trim()
           : buildAnalysisPrompt(context, hasScreenshot);
 
-      // 4. Use OpenCLI's doubao-app/ask command func for:
-      //    - Text injection into chat input
-      //    - Clicking the send button
-      //    - Polling for AI response completion
-      const askCommand = await _getAskCommand();
+      // 5. Use OpenCLI's utils for DOM interaction (injectText, clickSend)
+      const { injectTextScript, clickSendScript } =
+        await _getOpencliUtils();
+
+      // 6. Capture snapshot BEFORE sending:
+      //    - message count (to detect new DOM containers)
+      //    - last assistant text (to detect in-place content updates)
+      const beforeCount = await page.evaluate(
+        `document.querySelectorAll('${SEL.MESSAGE}').length`,
+      );
+      const beforeLastText = await page.evaluate(`(function() {
+        const containers = document.querySelectorAll('${SEL.MESSAGE}');
+        for (let i = containers.length - 1; i >= 0; i--) {
+          if (containers[i].classList.contains('justify-end')) continue;
+          const textEl = containers[i].querySelector('${SEL.MESSAGE_TEXT}');
+          if (!textEl) return '';
+          return textEl.innerText?.trim() || textEl.textContent?.trim() || '';
+        }
+        return '';
+      })()`);
+
+      // 7. Inject text into chat input
+      const injected = await page.evaluate(injectTextScript(prompt));
+      if (!injected || !injected.ok) {
+        throw new Error('无法在豆包聊天输入框中输入文本');
+      }
+
+      await sleep(0.5);
+
+      // 8. Click send button (fallback: Enter key)
+      const clicked = await page.evaluate(clickSendScript());
+      if (!clicked) {
+        await page.pressKey('Enter');
+      }
+
+      // 9. Poll for response using custom script (simple setTimeout, no page.wait)
       const timeoutSec = Math.ceil((context.timeout || 30000) / 1000);
+      const pollInterval = 1;
+      const maxPolls = Math.ceil(timeoutSec / pollInterval);
+      let response = '';
 
-      const result = await askCommand.func(page, {
-        text: prompt,
-        timeout: timeoutSec,
-      });
+      for (let i = 0; i < maxPolls; i++) {
+        await sleep(pollInterval);
 
-      // askCommand.func returns [{Role, Text}, {Role, Text}]
-      // Index 0 = User message, Index 1 = Assistant response
-      const response = (result && result[1] && result[1].Text) || '';
+        const result = await page.evaluate(
+          this._buildCustomPollScript(beforeCount, beforeLastText),
+        );
+        if (!result) continue;
+
+        if (result.phase === 'done' && result.text) {
+          response = result.text;
+          break;
+        }
+      }
+
+      if (!response) {
+        throw new Error(`豆包未在 ${timeoutSec} 秒内返回回复`);
+      }
 
       return {
         text: response,
@@ -160,10 +340,7 @@ class DoubaoAppAdapter extends BaseAgent {
         agentId: this.id,
       };
     } finally {
-      // Cleanup
       this._cleanupTempFile(tmpFile);
-      // Note: we keep the CDP connection alive for potential reuse;
-      // caller can call disconnect() when done
     }
   }
 }

@@ -44,16 +44,19 @@ class BaseAgent {
   }
 
   /**
-   * Connect to the CDP endpoint and return a CDPPage instance
+   * Connect to the CDP endpoint and return a CDPPage instance.
+   * If wsUrl is provided, connect directly to that WebSocket URL
+   * (bypassing target selection). Otherwise, use this.endpoint.
+   * @param {string} [wsUrl] - Optional direct WebSocket URL to connect to
    * @returns {Promise<Object>} CDPPage instance
    */
-  async connect() {
+  async connect(wsUrl) {
     if (this._page) return this._page;
 
     const { CDPBridge } = await this._getOpencliCdp();
     this._bridge = new CDPBridge();
     this._page = await this._bridge.connect({
-      cdpEndpoint: this.endpoint,
+      cdpEndpoint: wsUrl || this.endpoint,
     });
 
     return this._page;
