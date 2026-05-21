@@ -76,9 +76,20 @@ function createTray() {
       }
     }
     
-    // Create a minimal 1x1 icon if no valid icon
+    // Fallback: use scaled app icon if tray-icon is missing
     if (!trayIcon || trayIcon.isEmpty()) {
-      // Create a 1x1 transparent PNG programmatically
+      const appIconPath = path.join(__dirname, 'assets', 'icon.png');
+      if (fs.existsSync(appIconPath)) {
+        const appIcon = nativeImage.createFromPath(appIconPath);
+        if (!appIcon.isEmpty()) {
+          trayIcon = appIcon.resize({ width: 16, height: 16 });
+          console.log('Using resized app icon for tray (tray-icon.png not found)');
+        }
+      }
+    }
+
+    // Last resort: create a minimal 1x1 icon
+    if (!trayIcon || trayIcon.isEmpty()) {
       const pngBuffer = Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh48OB/' +
         'AAAAAElFTkSuQmCC',
