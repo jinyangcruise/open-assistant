@@ -486,7 +486,6 @@ class DoubaoAppAdapter extends BaseAgent {
    */
   async _captureSSEResponse(bridge, timeout, onChunk) {
     const POLL_MS = 200;
-    const REQUEST_WAIT_MS = 15000;
 
     // Enable Network domain — response flows normally to page,
     // we capture the body after Network.loadingFinished
@@ -560,9 +559,9 @@ class DoubaoAppAdapter extends BaseAgent {
 
         // Still waiting for request to be detected
         if (!targetRequestId) {
-          if (elapsed >= REQUEST_WAIT_MS) {
+          if (elapsed >= timeout) {
             await cleanup();
-            rejectCapture(new Error('未检测到豆包聊天请求（15秒超时），请确认消息已成功发送'));
+            rejectCapture(new Error(`未检测到豆包聊天请求（${Math.round(timeout / 1000)}秒超时），请确认消息已成功发送`));
             return;
           }
           continue;
