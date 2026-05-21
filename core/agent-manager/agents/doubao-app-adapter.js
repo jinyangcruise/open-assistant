@@ -1,211 +1,55 @@
 /**
  * DoubaoAppAdapter - AI Agent for Doubao Desktop App
  *
- * Connects to the Doubao desktop app via CDP (port 9225),
- * uploads a screenshot, injects a prompt, clicks send,
- * and polls for the AI response.
+ * Uses OpenCLI's built-in doubao-app adapter for the core interaction
+ * (text injection → send → response polling), with custom screenshot
+ * upload logic that OpenCLI doesn't natively support.
  */
 
+const path = require('path');
 const BaseAgent = require('../base-agent');
 
 // ---------------------------------------------------------------------------
-// Doubao Desktop App DOM Selectors
+// Doubao Desktop App DOM Selectors (mirrors OpenCLI's SEL in utils.js)
 // ---------------------------------------------------------------------------
 const SEL = {
   MESSAGE: '[data-testid="message_content"]',
-  MESSAGE_TEXT: '[data-testid="message_text_content"]',
-  INDICATOR: '[data-testid="indicator"]',
   INPUT: '[data-testid="chat_input_input"]',
-  SEND_BTN: '[data-testid="chat_input_send_button"]',
-  FILE_INPUT: 'input[type="file"]',
-  ACTION_KEYWORDS: [
-    '复制', '朗读', '播报', '喜欢', '不喜欢', '分享', '重新生成',
-    'copy', 'voice', 'like', 'dislike', 'share', 'regenerate', 'action', 'more',
-  ],
 };
 
+const FILE_INPUT = 'input[type="file"]';
+
 // ---------------------------------------------------------------------------
-// Injected JavaScript snippets (run in Doubao page context)
+// OpenCLI module access helpers (file:// URL bypasses Node exports map)
 // ---------------------------------------------------------------------------
 
-/**
- * Build script to upload a file via CDP (used as fallback)
- */
-function buildFileInputQueryScript() {
-  return `(function() {
-    var inputs = document.querySelectorAll('${SEL.FILE_INPUT}');
-    return { found: inputs.length > 0, count: inputs.length };
-  })()`;
+/** Resolve the file:// URL for OpenCLI's installed doubao-app utils.js */
+function _resolveOpencliPath() {
+  const utilsPath = path.resolve(
+    __dirname,
+    '../../../node_modules/@jackwener/opencli/clis/doubao-app/utils.js',
+  );
+  return 'file:///' + utilsPath.replace(/\\/g, '/');
 }
 
-/**
- * Inject text into the chat input textarea (React-compatible)
- */
-function buildInjectTextScript(text) {
-  return `(function(t) {
-    var textarea = document.querySelector('${SEL.INPUT}');
-    if (!textarea) return { ok: false, error: 'No textarea found' };
-    textarea.focus();
-    var setter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 'value'
-    )?.set;
-    if (setter) setter.call(textarea, t);
-    else textarea.value = t;
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    textarea.dispatchEvent(new Event('change', { bubbles: true }));
-    return { ok: true };
-  })(${JSON.stringify(text)})`;
+/** Lazy-load the ask command from OpenCLI's doubao-app adapter */
+let _askCommandPromise = null;
+async function _getAskCommand() {
+  if (!_askCommandPromise) {
+    const askPath = path.resolve(
+      __dirname,
+      '../../../node_modules/@jackwener/opencli/clis/doubao-app/ask.js',
+    );
+    const askUrl = 'file:///' + askPath.replace(/\\/g, '/');
+    _askCommandPromise = import(askUrl).then((m) => m.askCommand);
+  }
+  return _askCommandPromise;
 }
 
-/**
- * Multi-strategy click on the send button
- */
-function buildClickSendScript() {
-  return `(function() {
-    var textarea = document.querySelector('${SEL.INPUT}');
+// ---------------------------------------------------------------------------
+// Analysis prompt builder (application-specific)
+// ---------------------------------------------------------------------------
 
-    // Strategy 1: Find button near textarea
-    if (textarea) {
-      var parent = textarea.closest('div');
-      if (parent) {
-        var container = parent.parentElement || parent;
-        var allButtons = container.querySelectorAll('button, [role="button"]');
-        for (var bi = 0; bi < allButtons.length; bi++) {
-          var btn = allButtons[bi];
-          var rect = btn.getBoundingClientRect();
-          if (rect.width > 20 && rect.height > 20 && !btn.disabled) {
-            if (rect.top > textarea.getBoundingClientRect().top - 50) {
-              btn.click();
-              return { clicked: true, strategy: 'parent-button' };
-            }
-          }
-        }
-      }
-    }
-
-    // Strategy 2: Match button by text
-    var allButtons = document.querySelectorAll('button');
-    for (var bi = 0; bi < allButtons.length; bi++) {
-      var btn = allButtons[bi];
-      var rect = btn.getBoundingClientRect();
-      if (rect.width > 20 && rect.height > 20 && !btn.disabled) {
-        var btnText = (btn.textContent || '').toLowerCase();
-        var btnHTML = btn.innerHTML.toLowerCase();
-        if (btnText.indexOf('send') !== -1 || btnText.indexOf('发送') !== -1 ||
-            btnHTML.indexOf('send') !== -1 || btnHTML.indexOf('arrow') !== -1 ||
-            btnHTML.indexOf('upload') !== -1 || btnHTML.indexOf('plane') !== -1) {
-          btn.click();
-          return { clicked: true, strategy: 'text-match' };
-        }
-      }
-    }
-
-    // Strategy 3: Click SVG icon buttons
-    var svgs = document.querySelectorAll('svg');
-    for (var si = 0; si < svgs.length; si++) {
-      var btn = svgs[si].closest('button, [role="button"], [onclick]');
-      if (btn) {
-        var rect = btn.getBoundingClientRect();
-        if (rect.width > 20 && rect.height > 20) {
-          btn.click();
-          return { clicked: true, strategy: 'svg-button' };
-        }
-      }
-    }
-
-    // Strategy 4: Simulate Enter key
-    if (textarea) {
-      textarea.focus();
-      textarea.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-      }));
-      textarea.dispatchEvent(new KeyboardEvent('keyup', {
-        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-      }));
-      return { clicked: true, strategy: 'enter-key' };
-    }
-
-    return { clicked: false, strategy: 'none' };
-  })()`;
-}
-
-/**
- * Poll for AI response completion by detecting action buttons or indicator
- */
-function buildPollScript() {
-  const actionKeywords = JSON.stringify(SEL.ACTION_KEYWORDS);
-  return `(function() {
-    var msgs = document.querySelectorAll('${SEL.MESSAGE}');
-    var lastAssistantEl = null;
-    for (var idx = msgs.length - 1; idx >= 0; idx--) {
-      var m = msgs[idx];
-      if (!m.classList.contains('justify-end')) {
-        lastAssistantEl = m;
-        break;
-      }
-    }
-    if (!lastAssistantEl) return { done: false };
-
-    var actionKeywords = ${actionKeywords};
-    var container = lastAssistantEl.parentElement || lastAssistantEl;
-    var candidates = container.querySelectorAll('button, [role="button"], [tabindex]');
-
-    var nextEl = lastAssistantEl.nextElementSibling;
-    if (nextEl) {
-      var siblingBtns = nextEl.querySelectorAll('button, [role="button"]');
-      var combined = [];
-      for (var ci = 0; ci < candidates.length; ci++) combined.push(candidates[ci]);
-      for (var ci = 0; ci < siblingBtns.length; ci++) combined.push(siblingBtns[ci]);
-      candidates = combined;
-    }
-
-    for (var bi = 0; bi < candidates.length; bi++) {
-      var el = candidates[bi];
-      var t = (el.textContent || '').toLowerCase().trim();
-      var attr = (el.getAttribute('aria-label') || '').toLowerCase();
-      var dataTestId = (el.getAttribute('data-testid') || '').toLowerCase();
-      var combined = t + ' ' + attr + ' ' + dataTestId;
-      for (var ki = 0; ki < actionKeywords.length; ki++) {
-        if (combined.indexOf(actionKeywords[ki]) !== -1) {
-          var textEl = lastAssistantEl.querySelector('${SEL.MESSAGE_TEXT}');
-          if (!textEl) return { done: false };
-          var children = textEl.querySelectorAll('div[dir]');
-          var text = '';
-          if (children.length > 0) {
-            text = Array.from(children).map(function(c) { return c.innerText || c.textContent || ''; }).join('');
-          } else {
-            text = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
-          }
-          if (text.length < 5) return { done: false };
-          return { done: true, text: text, method: 'action-btn' };
-        }
-      }
-    }
-
-    // Fallback: indicator check
-    var textEl = lastAssistantEl.querySelector('${SEL.MESSAGE_TEXT}');
-    if (textEl) {
-      var hasIndicator = textEl.querySelector('${SEL.INDICATOR}') !== null ||
-                         textEl.getAttribute('data-show-indicator') === 'true';
-      var children = textEl.querySelectorAll('div[dir]');
-      var text = '';
-      if (children.length > 0) {
-        text = Array.from(children).map(function(c) { return c.innerText || c.textContent || ''; }).join('');
-      } else {
-        text = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
-      }
-      if (text.length > 10 && !hasIndicator) {
-        return { done: true, text: text, method: 'no-indicator' };
-      }
-    }
-
-    return { done: false };
-  })()`;
-}
-
-/**
- * Build the analysis prompt
- */
 function buildAnalysisPrompt(context, hasScreenshot) {
   const screenshotNote = hasScreenshot
     ? '我发送了一张屏幕截图，请分析截图中的内容'
@@ -248,12 +92,11 @@ class DoubaoAppAdapter extends BaseAgent {
    * @returns {Promise<{success: boolean}>}
    */
   async _uploadScreenshot(page, filePath) {
-    // Strategy 1: Use raw CDP DOM.setFileInputFiles
     try {
       const docResult = await page.cdp('DOM.getDocument');
       const queryResult = await page.cdp('DOM.querySelector', {
         nodeId: docResult.root.nodeId,
-        selector: SEL.FILE_INPUT,
+        selector: FILE_INPUT,
       });
       if (queryResult && queryResult.nodeId) {
         await page.cdp('DOM.setFileInputFiles', {
@@ -263,54 +106,10 @@ class DoubaoAppAdapter extends BaseAgent {
         return { success: true };
       }
     } catch (err) {
-      // Fall through
-    }
-
-    // Strategy 2: Try via evaluate (for pages where DOM CDP commands are restricted)
-    try {
-      const info = await page.evaluate(buildFileInputQueryScript());
-      if (info && info.found) {
-        // Retry with fresh document
-        const docResult2 = await page.cdp('DOM.getDocument');
-        const queryResult2 = await page.cdp('DOM.querySelector', {
-          nodeId: docResult2.root.nodeId,
-          selector: SEL.FILE_INPUT,
-        });
-        if (queryResult2 && queryResult2.nodeId) {
-          await page.cdp('DOM.setFileInputFiles', {
-            files: [filePath],
-            nodeId: queryResult2.nodeId,
-          });
-          return { success: true };
-        }
-      }
-    } catch (err) {
-      // Fall through
+      // File input not found or CDP command failed
     }
 
     return { success: false };
-  }
-
-  /**
-   * Wait for Doubao to finish generating a response
-   * @param {Object} page - CDPPage instance
-   * @param {number} timeout - Timeout in milliseconds
-   * @returns {Promise<string>} Response text
-   */
-  async _waitForResponse(page, timeout) {
-    const pollInterval = 500;
-    const maxPolls = Math.ceil(timeout / pollInterval);
-
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
-
-      const result = await page.evaluate(buildPollScript());
-      if (result && result.done) {
-        return result.text || '';
-      }
-    }
-
-    throw new Error('Response timeout');
   }
 
   /**
@@ -327,39 +126,32 @@ class DoubaoAppAdapter extends BaseAgent {
       // 1. Connect to Doubao CDP
       page = await this.connect();
 
-      // 2. Verify we're on a Doubao page
-      const title = await page.evaluate('document.title');
-      const url = await page.evaluate('window.location.href');
-
-      // 3. Save screenshot to temp file and upload
+      // 2. Save screenshot to temp file and upload
       tmpFile = this._saveTempScreenshot(screenshotBuffer);
       const uploadResult = await this._uploadScreenshot(page, tmpFile);
 
-      // 4. Build and inject the prompt
+      // 3. Build the prompt
       const hasScreenshot = uploadResult.success;
-      const prompt = context.customPrompt && context.customPrompt.trim()
-        ? context.customPrompt.trim()
-        : buildAnalysisPrompt(context, hasScreenshot);
+      const prompt =
+        context.customPrompt && context.customPrompt.trim()
+          ? context.customPrompt.trim()
+          : buildAnalysisPrompt(context, hasScreenshot);
 
-      const injected = await page.evaluate(buildInjectTextScript(prompt));
-      if (!injected || !injected.ok) {
-        throw new Error('Failed to inject text into Doubao');
-      }
+      // 4. Use OpenCLI's doubao-app/ask command func for:
+      //    - Text injection into chat input
+      //    - Clicking the send button
+      //    - Polling for AI response completion
+      const askCommand = await _getAskCommand();
+      const timeoutSec = Math.ceil((context.timeout || 30000) / 1000);
 
-      // Verify text was written
-      const verifyLen = await page.evaluate(
-        `document.querySelector('${SEL.INPUT}')?.value?.length || 0`
-      );
+      const result = await askCommand.func(page, {
+        text: prompt,
+        timeout: timeoutSec,
+      });
 
-      // 5. Click send
-      const clicked = await page.evaluate(buildClickSendScript());
-      if (!clicked || !clicked.clicked) {
-        throw new Error('Failed to click send button');
-      }
-
-      // 6. Wait for response
-      const timeout = context.timeout || 30000;
-      const response = await this._waitForResponse(page, timeout);
+      // askCommand.func returns [{Role, Text}, {Role, Text}]
+      // Index 0 = User message, Index 1 = Assistant response
+      const response = (result && result[1] && result[1].Text) || '';
 
       return {
         text: response,
@@ -370,7 +162,7 @@ class DoubaoAppAdapter extends BaseAgent {
     } finally {
       // Cleanup
       this._cleanupTempFile(tmpFile);
-      // Note: we keep the connection alive for potential reuse,
+      // Note: we keep the CDP connection alive for potential reuse;
       // caller can call disconnect() when done
     }
   }
