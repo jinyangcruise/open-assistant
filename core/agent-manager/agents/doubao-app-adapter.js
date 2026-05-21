@@ -18,6 +18,7 @@ const SEL = {
   MESSAGE: '[data-testid="message_content"]',
   MESSAGE_TEXT: '[data-testid="message_text_content"]',
   INDICATOR: '[data-testid="indicator"]',
+  ASR_BTN: '[data-testid="asr_btn"]',
   INPUT: '[data-testid="chat_input_input"]',
 };
 
@@ -193,60 +194,55 @@ class DoubaoAppAdapter extends BaseAgent {
   }
 
   /**
-   * Check if a new assistant response is ready.
+   * Fast poll script — returns current state of Doubao's chat page.
    *
-   * Walks backwards through message containers and checks:
-   * 1. Whether the indicator (streaming cursor) is still visible
-   * 2. Whether the last assistant message text has changed from before
+   * Returns structured data so the Node.js loop can make decisions about
+   * idle timeout, completion detection, etc.
    *
-   * IMPORTANT: We do NOT rely on nowCount > beforeCount here, because the
-   * user's own message also creates a new [data-testid="message_content"]
-   * container — so the count would increase before the assistant responds,
-   * causing us to return the stale old assistant text as "done".
+   * Completion signal (as identified via DevTools inspection):
+   * - hasAsrBtn → true: voice button visible = idle OR generation complete
+   *   During generation, `asr_btn` element is REMOVED from the DOM and
+   *   replaced by a send-btn-wrapper. When generation finishes, the
+   *   `asr_btn` element is restored, signaling completion.
    *
-   * @param {number} beforeCount - message count before sending (kept for
-   *   possible future use, not used in the main check)
-   * @param {string} beforeLastText - text of the last assistant message
-   *   before sending
+   * @param {string} beforeLastText - assistant text captured BEFORE sending
    * @returns {string} evaluate script
    */
-  _buildCustomPollScript(beforeCount, beforeLastText) {
+  _buildFastPollScript(beforeLastText) {
     const escapedText = JSON.stringify(beforeLastText);
     return `(function() {
       const containers = document.querySelectorAll('${SEL.MESSAGE}');
       const hasIndicator = document.querySelector('${SEL.INDICATOR}') !== null;
+      const hasAsrBtn = document.querySelector('${SEL.ASR_BTN}') !== null;
 
-      // Walk backwards to find the last assistant message
-      let lastAssistantText = '';
+      // --- Walk backwards: find the last assistant message ---
+      let lastText = '';
       for (let i = containers.length - 1; i >= 0; i--) {
-        const c = containers[i];
-        if (c.classList.contains('justify-end')) continue;
-        const textEl = c.querySelector('${SEL.MESSAGE_TEXT}');
-        if (!textEl) continue;
-        lastAssistantText = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
+        if (containers[i].classList.contains('justify-end')) continue;
+        const textEl = containers[i].querySelector('${SEL.MESSAGE_TEXT}');
+        if (textEl) {
+          lastText = textEl.innerText?.trim() || textEl.textContent?.trim() || '';
+        }
         break;
       }
 
-      // 1. Still streaming — indicator is visible
-      if (hasIndicator) return { phase: 'streaming' };
-
-      // 2. Assistant text has changed → new response is ready
-      if (lastAssistantText && lastAssistantText !== ${escapedText}) {
-        return { phase: 'done', text: lastAssistantText };
-      }
-
-      // 3. No change yet — keep waiting
-      return { phase: 'waiting' };
+      return {
+        text: lastText,
+        hasIndicator: hasIndicator,
+        hasAsrBtn: hasAsrBtn,
+      };
     })()`;
   }
 
   /**
    * Analyze a screenshot using Doubao.
    *
-   * Uses OpenCLI's injectTextScript + clickSendScript for DOM interaction,
-   * but uses a custom polling script that checks BOTH message count AND
-   * last-assistant-text-change — so it works whether Doubao creates new
-   * DOM containers or reuses existing ones on repeated calls.
+   * Polling strategy (asr_btn-based):
+   * - 200ms polling interval for near-instant response detection
+   * - Primary completion: `[data-testid="asr_btn"]` reappears (voice button)
+   *   This element is removed during generation and restored when done.
+   * - Fallback: idle timeout (1.5s no output change) → assume complete
+   * - Safety limit: user-configured timeout (context.timeout)
    *
    * @param {Buffer} screenshotBuffer - PNG screenshot buffer
    * @param {Object} context - Analysis context
@@ -257,33 +253,37 @@ class DoubaoAppAdapter extends BaseAgent {
     let tmpFile = null;
 
     try {
-      // 1. Connect to Doubao CDP (reuses existing connection if available)
+      // 0. Force fresh connection
+      this.disconnect();
       page = await this.connect();
 
-      // 2. Ensure we're on a proper chat page
+      // 1. Ensure we're on a proper chat page
       page = await this._ensureChatPage(page);
 
-      // 3. Save screenshot and upload
+      // 2. Save screenshot and upload
       tmpFile = this._saveTempScreenshot(screenshotBuffer);
       await this._uploadScreenshot(page, tmpFile);
 
-      // 4. Build the prompt
+      // 3. Build the prompt
       const hasScreenshot = true;
       const prompt =
         context.customPrompt && context.customPrompt.trim()
           ? context.customPrompt.trim()
           : buildAnalysisPrompt(context, hasScreenshot);
 
-      // 5. Use OpenCLI's utils for DOM interaction (injectText, clickSend)
+      // 4. Use OpenCLI's utils for DOM interaction (injectText, clickSend)
       const { injectTextScript, clickSendScript } =
         await _getOpencliUtils();
 
-      // 6. Capture snapshot BEFORE sending:
-      //    - message count (to detect new DOM containers)
-      //    - last assistant text (to detect in-place content updates)
-      const beforeCount = await page.evaluate(
-        `document.querySelectorAll('${SEL.MESSAGE}').length`,
-      );
+      // 5. Wake up hidden renderer
+      try {
+        await page.cdp('Page.bringToFront');
+        await sleep(0.5);
+      } catch (e) {
+        // Page might be unreachable
+      }
+
+      // 6. Capture the last assistant message text BEFORE sending
       const beforeLastText = await page.evaluate(`(function() {
         const containers = document.querySelectorAll('${SEL.MESSAGE}');
         for (let i = containers.length - 1; i >= 0; i--) {
@@ -309,28 +309,62 @@ class DoubaoAppAdapter extends BaseAgent {
         await page.pressKey('Enter');
       }
 
-      // 9. Poll for response using custom script (simple setTimeout, no page.wait)
-      const timeoutSec = Math.ceil((context.timeout || 30000) / 1000);
-      const pollInterval = 1;
-      const maxPolls = Math.ceil(timeoutSec / pollInterval);
+      // ---------------------------------------------------------------
+      // 9. Idle-timeout based polling
+      //
+      //    Detection logic:
+      //      1. Text changes → reset idle timer
+      //      2. asr_btn reappears (!hasAsrBtn → true) → generation done
+      //         The asr_btn (voice button) is REMOVED from the DOM during
+      //         generation and RESTORED when done.
+      //      3. Idle timeout (no new text for 1.5s) → fallback
+      // ---------------------------------------------------------------
+      const userTimeout = context.timeout || 30000;
+      const MAX_TOTAL_MS = userTimeout;
+      const IDLE_TIMEOUT_MS = Math.min(1500, Math.floor(MAX_TOTAL_MS / 3));
+      const POLL_MS = 200;
+
+      let lastText = beforeLastText;
+      let idleMs = 0;
+      let totalMs = 0;
+      let hasNewText = false;
       let response = '';
 
-      for (let i = 0; i < maxPolls; i++) {
-        await sleep(pollInterval);
+      while (totalMs < MAX_TOTAL_MS) {
+        await sleep(POLL_MS / 1000);
+        totalMs += POLL_MS;
 
         const result = await page.evaluate(
-          this._buildCustomPollScript(beforeCount, beforeLastText),
+          this._buildFastPollScript(beforeLastText),
         );
         if (!result) continue;
 
-        if (result.phase === 'done' && result.text) {
+        // --- Detect new text → reset idle timer ---
+        if (result.text && result.text !== lastText) {
+          lastText = result.text;
+          idleMs = 0;
+          hasNewText = true;
+        } else {
+          idleMs += POLL_MS;
+        }
+
+        // --- PRIMARY COMPLETION: asr_btn reappeared → generation done ---
+        // During generation, `[data-testid="asr_btn"]` is removed from the
+        // DOM. When generation finishes, it's restored (voice button).
+        if (hasNewText && result.text && result.hasAsrBtn) {
+          response = result.text;
+          break;
+        }
+
+        // --- FALLBACK: idle timeout → no new output for a while ---
+        if (hasNewText && idleMs >= IDLE_TIMEOUT_MS) {
           response = result.text;
           break;
         }
       }
 
       if (!response) {
-        throw new Error(`豆包未在 ${timeoutSec} 秒内返回回复`);
+        throw new Error(`豆包未在 ${userTimeout / 1000} 秒内返回回复`);
       }
 
       return {
