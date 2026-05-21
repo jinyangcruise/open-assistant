@@ -468,40 +468,34 @@ class DoubaoAppAdapter extends BaseAgent {
   }
 
   /**
-   * Capture AI response via CDP Fetch domain (SSE interception).
+   * Capture AI response via injected fetch interceptor.
    *
-   * Enables Fetch interception for /chat/completion requests at the
-   * browser process level, then polls Fetch.getResponseBody to read
-   * the streaming response body as it accumulates. Works even when
-   * the chat window is hidden / minimized to tray.
+   * Injects a script into the Doubao page that monkey-patches window.fetch to
+   * intercept the /chat/completion SSE response. The script clones and reads
+   * the streaming response body, extracts text chunks from SSE events in
+   * real-time, and sends them back via console.debug('__SSE_TEXT__', text).
    *
-   * CRITICAL: This method starts pre-listening for the request BEFORE
-   * the send button is clicked. Call it first (it returns a Promise),
-   * THEN click send, THEN await the returned promise.
+   * This achieves true streaming — text arrives as Doubao generates it,
+   * rather than waiting for the entire Network.loadingFinished body.
    *
-   * @param {Object} bridge  - CDPBridge instance (from this.getBridge())
+   * CRITICAL: Call this BEFORE clicking send. The interceptor must be
+   * installed before the fetch request is made.
+   *
+   * @param {Object} bridge  - CDPBridge instance
    * @param {number} timeout - max wait time in ms
-   * @param {Function} [onChunk] - optional callback(incrementalText) for streaming
+   * @param {Function} [onChunk] - streaming callback (null = full mode)
    * @returns {Promise<string>} Full response text
    */
   async _captureSSEResponse(bridge, timeout, onChunk) {
-    const POLL_MS = 200;
-
-    // Enable Network domain — response flows normally to page,
-    // we capture the body after Network.loadingFinished
-    console.log('[DoubaoAdapter] Network.enable');
-    await bridge.send('Network.enable');
-
-    let targetRequestId = null;
-    let caughtBody = null;
+    let fullText = '';
+    let done = false;
     let cleanupDone = false;
 
     const cleanup = async () => {
       if (cleanupDone) return;
       cleanupDone = true;
-      try { await bridge.send('Network.disable'); } catch (_) { /* ignore */ }
-      bridge.off('Network.requestWillBeSent', onReqSent);
-      bridge.off('Network.loadingFinished', onLoadFinished);
+      try { await bridge.send('Runtime.disable'); } catch (_) { /* ignore */ }
+      bridge.off('Runtime.consoleAPICalled', onConsole);
     };
 
     let resolveCapture, rejectCapture;
@@ -510,165 +504,105 @@ class DoubaoAppAdapter extends BaseAgent {
       rejectCapture = reject;
     });
 
-    // Identify the /chat/completion request
-    const onReqSent = (event) => {
-      if (targetRequestId) return;
-      if ((event?.request?.url || '').includes('chat/completion')) {
-        targetRequestId = event.requestId;
-        console.log('[DoubaoAdapter] Network: /chat/completion requestId=', targetRequestId);
+    const onConsole = (event) => {
+      if (event.type !== 'debug') return;
+      const args = event.args || [];
+      if (args.length < 2) return;
+      const tag = args[0]?.value;
+      const text = args[1]?.value;
+
+      if (tag === '__SSE_TEXT__' && typeof text === 'string') {
+        fullText += text;
+        if (onChunk) onChunk(text);
+      } else if (tag === '__SSE_DONE__') {
+        if (!done) {
+          done = true;
+          cleanup().then(() => resolveCapture(fullText));
+        }
+      } else if (tag === '__SSE_ERR__') {
+        if (!done) {
+          done = true;
+          cleanup().then(() => resolveCapture(fullText));
+        }
       }
     };
 
-    // Capture body when loading finishes
-    const onLoadFinished = async (event) => {
-      if (event.requestId !== targetRequestId) return;
-      console.log('[DoubaoAdapter] Network.loadingFinished for:', targetRequestId);
-      try {
-        const result = await bridge.send('Network.getResponseBody', { requestId: targetRequestId });
-        console.log('[DoubaoAdapter] getResponseBody result keys:', Object.keys(result || {}), 'base64Encoded:', result?.base64Encoded, 'bodyType:', typeof result?.body, 'bodyLen:', result?.body?.length);
-        caughtBody = result?.base64Encoded
-          ? Buffer.from(result.body, 'base64').toString('utf-8')
-          : (result?.body || '');
-        // Debug: hex dump first 80 bytes to determine actual encoding
-        const raw = result?.body || '';
-        const hexBytes = [];
-        for (let i = 0; i < Math.min(80, raw.length); i++) {
-          const code = raw.charCodeAt(i);
-          hexBytes.push(code.toString(16).padStart(2, '0'));
-        }
-        const hasHighChars = [...raw.substring(0, 80)].some(c => c.charCodeAt(0) > 0xFF);
-        console.log('[DoubaoAdapter] Body hex (first 80 bytes):', hexBytes.join(' '),
-          '| hasCodePoints>0xFF:', hasHighChars);
-        console.log('[DoubaoAdapter] Got response body, length=', caughtBody.length);
-      } catch (err) {
-        console.log('[DoubaoAdapter] Network.getResponseBody failed:', err.message);
+    // Enable Runtime domain for console.debug interception
+    console.log('[DoubaoAdapter] Runtime.enable + inject fetch interceptor');
+    await bridge.send('Runtime.enable');
+    bridge.on('Runtime.consoleAPICalled', onConsole);
+
+    // Inject fetch interceptor — clones SSE response, reads stream,
+    // extracts text from CHUNK_DELTA / STREAM_MSG_NOTIFY events,
+    // sends chunks via console.debug('__SSE_TEXT__', text)
+    const injectScript = `(function(){
+if(window.__sseInterceptorInstalled)return;
+window.__sseInterceptorInstalled=true;
+var _orig=window.fetch;
+window.fetch=async function(){
+var response=await _orig.apply(this,arguments);
+var url=typeof arguments[0]==='string'?arguments[0]:(arguments[0]&&arguments[0].url);
+if(url&&url.indexOf('chat/completion')!==-1&&response.body){
+var clone=response.clone();
+var reader=clone.body.getReader();
+var decoder=new TextDecoder('utf-8');
+var buffer='';
+(function pump(){
+reader.read().then(function(r){
+if(r.done){
+if(buffer.trim()){
+var events=buffer.split('\\n\\n');
+for(var i=0;i<events.length;i++)_proc(events[i]);
+}
+console.debug('__SSE_DONE__','');
+return;
+}
+buffer+=decoder.decode(r.value,{stream:true});
+var parts=buffer.split('\\n\\n');
+buffer=parts.pop();
+for(var i=0;i<parts.length;i++)_proc(parts[i]);
+pump();
+}).catch(function(e){
+console.debug('__SSE_ERR__',(e&&e.message)||'');
+});
+})();
+function _proc(raw){
+var lines=raw.split('\\n');
+var et='',ed='';
+for(var i=0;i<lines.length;i++){
+var l=lines[i];
+if(l.indexOf('event:')===0)et=l.slice(6).trim();
+else if(l.indexOf('data:')===0)ed=l.slice(5).trim();
+}
+if(!et||!ed)return;
+try{
+var d=JSON.parse(ed);
+if(et==='CHUNK_DELTA'&&d.text)console.debug('__SSE_TEXT__',d.text);
+else if(et==='STREAM_MSG_NOTIFY'&&d.content&&d.content.content_block){
+var blocks=d.content.content_block;
+for(var j=0;j<blocks.length;j++){
+var t=blocks[j]&&blocks[j].content&&blocks[j].content.text_block&&blocks[j].content.text_block.text;
+if(t)console.debug('__SSE_TEXT__',t);
+}
+}
+}catch(e){}
+}
+}
+return response;
+};
+})()`;
+
+    await bridge.send('Runtime.evaluate', { expression: injectScript });
+
+    // Timeout safety
+    setTimeout(async () => {
+      if (!done) {
+        done = true;
+        await cleanup();
+        resolveCapture(fullText);
       }
-    };
+    }, timeout);
 
-    bridge.on('Network.requestWillBeSent', onReqSent);
-    bridge.on('Network.loadingFinished', onLoadFinished);
-
-    // Poll until body is captured or timeout
-    let elapsed = 0;
-    const startTime = Date.now();
-
-    const run = async () => {
-      while (elapsed < timeout) {
-        await sleep(POLL_MS / 1000);
-        elapsed = Date.now() - startTime;
-
-        // Still waiting for request to be detected
-        if (!targetRequestId) {
-          if (elapsed >= timeout) {
-            await cleanup();
-            rejectCapture(new Error(`未检测到豆包聊天请求（${Math.round(timeout / 1000)}秒超时），请确认消息已成功发送`));
-            return;
-          }
-          continue;
-        }
-
-        // Body captured — parse SSE events and emit incrementally
-        if (caughtBody) {
-          // Debug: dump first 500 chars of raw body and first event
-          console.log('[DoubaoAdapter] Body preview (first 300 chars):', caughtBody.substring(0, 300));
-
-          const events = caughtBody.split('\n\n');
-          let fullText = '';
-          let eventCount = 0;
-          let chunkDebugCount = 0;
-
-          // Buffered conversion: Doubao emits each byte of Chinese text
-          // as separate CHUNK_DELTA events, so we accumulate raw Latin-1
-          // bytes and convert only complete UTF-8 sequences.
-          let rawAccumulator = '';   // pending Latin-1 bytes
-          let lastConvertedLen = 0;  // chars emitted so far
-          let totalChunks = 0;
-          let streamMsgCount = 0;
-
-          for (const raw of events) {
-            const lines = raw.split('\n');
-            let evType = '', evData = '';
-            for (const l of lines) {
-              if (l.startsWith('event:')) evType = l.slice(6).trim();
-              else if (l.startsWith('data:')) evData = l.slice(5).trim();
-            }
-            if (!evType || !evData) continue;
-
-            // Debug first 3 events
-            if (eventCount < 3) {
-              console.log('[DoubaoAdapter] Event #' + eventCount + ' type=' + evType + ' data=' + evData.substring(0, 200));
-            }
-            eventCount++;
-
-            try {
-              const d = JSON.parse(evData);
-              if (evType === 'CHUNK_DELTA' && typeof d?.text === 'string') {
-                rawAccumulator += d.text;
-                totalChunks++;
-                if (chunkDebugCount < 5) {
-                  chunkDebugCount++;
-                  const hexCodes = [];
-                  for (let i = 0; i < Math.min(30, d.text.length); i++) {
-                    hexCodes.push(d.text.charCodeAt(i).toString(16).padStart(2, '0'));
-                  }
-                  console.log('[DoubaoAdapter] CHUNK_DELTA #' + chunkDebugCount + ' raw[' + d.text.length + ']:', hexCodes.join(' '));
-                }
-              } else if (evType === 'STREAM_MSG_NOTIFY') {
-                streamMsgCount++;
-                const blocks = d?.content?.content_block || [];
-                console.log('[DoubaoAdapter] STREAM_MSG_NOTIFY #' + streamMsgCount + ': blocks=' + blocks.length,
-                  'keys=' + Object.keys(d || {}).join(','));
-                if (blocks.length > 0) {
-                  console.log('[DoubaoAdapter] STREAM_MSG_NOTIFY firstBlock keys:', Object.keys(blocks[0] || {}).join(','));
-                  console.log('[DoubaoAdapter] STREAM_MSG_NOTIFY evData:', evData.substring(0, 400));
-                }
-                for (const b of blocks) {
-                  const rawText = b?.content?.text_block?.text;
-                  if (typeof rawText === 'string') {
-                    rawAccumulator += rawText;
-                    totalChunks++;
-                  }
-                }
-              } else if (evType === 'SSE_REPLY_END' && d?.end_type === 3) {
-                // Drain: convert all accumulated raw bytes at once
-                console.log('[DoubaoAdapter] Accumulated raw hex (first 100):',
-                  [...rawAccumulator.slice(0, 50)].map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' '));
-                const converted = this._cdpBodyToUtf8(rawAccumulator);
-                console.log('[DoubaoAdapter] Final convert: rawLen=' + rawAccumulator.length + ' convertedLen=' + converted.length);
-                console.log('[DoubaoAdapter] Converted text (first 100):', JSON.stringify(converted.slice(0, 100)));
-                fullText = converted;
-                if (onChunk) onChunk(converted);
-                rawAccumulator = '';
-                break;
-              }
-            } catch (e) {
-              if (eventCount < 5) console.log('[DoubaoAdapter] Event parse error:', e.message, 'data:', evData.substring(0, 80));
-            }
-          }
-
-          // Fallback drain if we didn't hit SSE_REPLY_END(type=3)
-          if (rawAccumulator) {
-            const leftover = this._cdpBodyToUtf8(rawAccumulator);
-            fullText += leftover;
-            if (onChunk && leftover) onChunk(leftover);
-          }
-
-          console.log('[DoubaoAdapter] Network done: events=' + eventCount + ' chunks=' + totalChunks + ' rawLen=' + rawAccumulator.length + ' fullText=' + fullText.length + ' chars');
-
-          await cleanup();
-          resolveCapture(fullText);
-          return;
-        }
-
-        console.log('[DoubaoAdapter] Network poll: waiting for body, elapsed=' + elapsed + 'ms');
-      }
-
-      console.log('[DoubaoAdapter] Network capture timeout after ' + elapsed + 'ms');
-      await cleanup();
-      resolveCapture('');
-    };
-
-    run(); // Start polling in background
     return capturePromise;
   }
 
