@@ -13,7 +13,7 @@ const os = require('os');
 
 /**
  * Paste text to current cursor position
- * Uses system clipboard + OS-level paste simulation (single batch)
+ * Uses system clipboard + OS-level paste simulation
  */
 async function pasteText(text) {
   if (!text || typeof text !== 'string') {
@@ -23,163 +23,40 @@ async function pasteText(text) {
   try {
     console.log('Preparing to paste text, length:', text.length, 'lines:', text.split('\n').length);
     
-    const paster = new StreamingPaster();
-    await paster.start();
-    await paster.push(text);
-    await paster.finish();
+    // Save current clipboard
+    const oldClipboard = clipboard.readText();
+
+    // Set new text to clipboard (preserve original format)
+    clipboard.writeText(text);
+    
+    // Wait for clipboard to update
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Verify clipboard was set
+    const verifyText = clipboard.readText();
+    if (verifyText.length < text.length * 0.9) {
+      console.warn('Clipboard verification failed, retrying...');
+      console.log('Expected length:', text.length, 'Got:', verifyText.length);
+      clipboard.writeText(text);
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    console.log('Clipboard content verified, length:', clipboard.readText().length);
+
+    // Simulate Ctrl+V at OS level
+    console.log('Simulating paste shortcut...');
+    await simulatePaste();
+
+    // Wait for paste to complete
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Restore clipboard
+    clipboard.writeText(oldClipboard);
 
     console.log('Text pasted successfully');
   } catch (error) {
     console.error('Paste failed:', error.message);
     throw new Error(`Failed to paste text: ${error.message}`);
-  }
-}
-
-/**
- * StreamingPaster — paste text in multiple incremental chunks.
- *
- * Batches small incoming chunks to reduce paste operations.
- * Internally serializes clipboard access with a FIFO processing loop.
- *
- * Usage:
- *   const paster = new StreamingPaster();
- *   await paster.start();
- *   await paster.push('first chunk');
- *   await paster.push('second chunk');  // appends at cursor position
- *   await paster.finish();
- */
-class StreamingPaster {
-  constructor() {
-    this._originalClipboard = '';
-    this._started = false;
-    this._finished = false;
-    this._busy = false;
-    this._pending = [];
-    this._flushResolve = null;
-
-    // Batching: accumulate small chunks to reduce paste frequency
-    this._batchText = '';
-    this._batchTimer = null;
-    this._minBatchSize = 50;   // chars — flush when this much accumulates
-    this._maxBatchDelay = 300; // ms — flush after this much idle time
-  }
-
-  /** Save original clipboard and prepare for streaming */
-  async start() {
-    if (this._started) return;
-    this._started = true;
-    this._originalClipboard = clipboard.readText();
-    await sleep(50);
-  }
-
-  /**
-   * Push a text chunk for streaming paste.
-   *
-   * Small chunks are batched internally and flushed when either:
-   * - The accumulated text reaches _minBatchSize (50 chars)
-   * - _maxBatchDelay (300ms) has passed since the last push
-   *
-   * @param {string} text - The text chunk to paste
-   */
-  async push(text) {
-    if (!this._started || this._finished) {
-      throw new Error('StreamingPaster: call start() before push(), and do not push() after finish()');
-    }
-    if (!text) return;
-
-    // Accumulate into batch buffer
-    this._batchText += text;
-
-    // Reset debounce timer
-    if (this._batchTimer) clearTimeout(this._batchTimer);
-
-    // Flush if batch is large enough
-    if (this._batchText.length >= this._minBatchSize) {
-      this._flushBatch();
-    } else {
-      // Schedule a flush after idle timeout
-      this._batchTimer = setTimeout(() => this._flushBatch(), this._maxBatchDelay);
-    }
-  }
-
-  /**
-   * Flush the accumulated batch into the processing queue.
-   */
-  _flushBatch() {
-    if (this._batchTimer) {
-      clearTimeout(this._batchTimer);
-      this._batchTimer = null;
-    }
-    if (!this._batchText) return;
-
-    this._pending.push(this._batchText);
-    this._batchText = '';
-
-    if (!this._busy) {
-      this._busy = true;
-      // DO NOT await — let the processing loop run in the background
-      this._processQueue();
-    }
-  }
-
-  /**
-   * Internal async loop that processes queued paste operations
-   * one at a time. clipboard.writeText() runs before the first await,
-   * ensuring synchronous clipboard access.
-   */
-  async _processQueue() {
-    console.log('[StreamingPaster] _processQueue started, pending:', this._pending.length);
-    while (this._pending.length > 0) {
-      const text = this._pending.shift();
-
-      // null = flush signal from finish()
-      if (text === null) {
-        console.log('[StreamingPaster] flush signal received, restoring clipboard');
-        this._finished = true;
-        clipboard.writeText(this._originalClipboard);
-        if (this._flushResolve) {
-          this._flushResolve();
-          this._flushResolve = null;
-        }
-        this._busy = false;
-        return;
-      }
-
-      try {
-        // clipboard.writeText runs SYNCHRONOUSLY before await
-        clipboard.writeText(text);
-        console.log('[StreamingPaster] wrote to clipboard, length:', text.length);
-        await sleep(20);
-        await simulatePaste();
-        console.log('[StreamingPaster] paste completed');
-        await sleep(30);
-      } catch (err) {
-        console.warn('[StreamingPaster] push failed:', err);
-      }
-    }
-    console.log('[StreamingPaster] _processQueue finished');
-    this._busy = false;
-  }
-
-  /**
-   * Flush any remaining batch, then restore original clipboard.
-   */
-  async finish() {
-    if (this._finished) return;
-
-    // Flush any remaining batch first
-    this._flushBatch();
-
-    console.log('[StreamingPaster] finish called, pending:', this._pending.length);
-
-    return new Promise((resolve) => {
-      this._flushResolve = resolve;
-      this._pending.push(null); // flush signal
-      if (!this._busy) {
-        this._busy = true;
-        this._processQueue();
-      }
-    });
   }
 }
 
@@ -193,7 +70,7 @@ function simulatePaste() {
     if (platform === 'win32') {
       // Windows: Use VBScript to simulate Ctrl+V
       const vbscript = 'Set WshShell = CreateObject("WScript.Shell")\n' +
-                       'WScript.Sleep 50\n' +
+                       'WScript.Sleep 200\n' +
                        'WshShell.SendKeys "^v"';
       
       const tempFile = path.join(os.tmpdir(), 'paste.vbs');
@@ -261,14 +138,8 @@ function unregisterAllShortcuts() {
   globalShortcut.unregisterAll();
 }
 
-/** Short sleep helper */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 module.exports = {
   pasteText,
-  StreamingPaster,
   getText,
   copyToClipboard,
   registerGlobalShortcut,
