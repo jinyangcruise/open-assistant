@@ -27,6 +27,7 @@ class BaseAgent {
     this.type = config.type || 'electron';
     this.endpoint = config.endpoint;
     this.enabled = config.enabled !== false;
+    this.installPath = config.install_path || '';
     this._page = null;
     this._bridge = null;
     this._opencliCdp = null; // cached module reference

@@ -1,6 +1,5 @@
 {
   "shortcut": "Control+Space",
-  "doubao_cdp_endpoint": "http://127.0.0.1:9225",
   "timeout_seconds": 30,
   "auto_insert": true,
   "screenshot_region": "full",
@@ -17,7 +16,8 @@
       "name": "豆包桌面端",
       "type": "electron",
       "endpoint": "http://127.0.0.1:9225",
-      "enabled": true
+      "enabled": true,
+      "install_path": ""
     }
   }
 }

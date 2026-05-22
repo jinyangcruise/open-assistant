@@ -74,7 +74,7 @@ function setupEventListeners() {
     input.addEventListener('change', async () => {
       await saveConfig();
     });
-    // For text inputs (shortcut, cdpEndpoint), also save on blur
+    // For text inputs (shortcut), also save on blur
     if (input.type === 'text') {
       input.addEventListener('blur', async () => {
         await saveConfig();
@@ -154,7 +154,6 @@ async function saveConfig() {
 
 function populateForm(config) {
   document.getElementById('shortcut').value = config.shortcut || 'Control+Space';
-  document.getElementById('cdpEndpoint').value = config.doubao_cdp_endpoint || 'http://127.0.0.1:9225';
   document.getElementById('timeout').value = config.timeout_seconds || 30;
   document.getElementById('autoInsert').value = config.auto_insert !== false ? 'true' : 'false';
   document.getElementById('showNotifications').checked = config.show_notifications !== false;
@@ -436,8 +435,18 @@ function renderAgents() {
       '    <div class="agent-item-name">' + escapeHtml(a.name) + '</div>' +
       '    <span class="agent-item-type">' + typeLabel + '</span>' +
       '  </div>' +
-      '  <div class="agent-item-endpoint">' + escapeHtml(a.endpoint) + '</div>' +
       '  <div class="agent-item-status" id="agent-status-' + a.id + '"></div>' +
+      '  <div class="agent-endpoint-row">' +
+      '    <label class="agent-endpoint-label">CDP Endpoint:</label>' +
+      '    <input type="text" class="agent-endpoint-input" data-agent-id="' + a.id + '" ' +
+      '      value="' + escapeHtml(a.endpoint) + '" />' +
+      '  </div>' +
+      '  <div class="agent-install-path">' +
+      '    <label class="install-path-label">Install Path:</label>' +
+      '    <input type="text" class="install-path-input" data-agent-id="' + a.id + '" ' +
+      '      value="' + escapeHtml(a.installPath || '') + '" ' +
+      '      placeholder="Leave empty for auto-detect" />' +
+      '  </div>' +
       '</div>' +
       '<div class="agent-item-actions">' +
       '  <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">Test</button>' +
@@ -451,6 +460,40 @@ function renderAgents() {
     })(a.id));
 
     agentsList.appendChild(item);
+
+    // Auto-save install path on change/blur
+    (function(agentId, input) {
+      input.addEventListener('change', async function(e) {
+        e.stopPropagation();
+        var value = this.value.trim();
+        await window.electronAPI.updateAgentConfig(agentId, { install_path: value });
+        addLog('Install path updated for ' + agentId, 'info');
+      });
+      input.addEventListener('blur', async function(e) {
+        e.stopPropagation();
+        var value = this.value.trim();
+        await window.electronAPI.updateAgentConfig(agentId, { install_path: value });
+      });
+    })(a.id, item.querySelector('.install-path-input'));
+
+    // Auto-save endpoint on change/blur
+    (function(agentId, input) {
+      input.addEventListener('change', async function(e) {
+        e.stopPropagation();
+        var value = this.value.trim();
+        await window.electronAPI.updateAgentConfig(agentId, { endpoint: value });
+        addLog('CDP Endpoint updated for ' + agentId, 'info');
+      });
+      input.addEventListener('blur', async function(e) {
+        e.stopPropagation();
+        var value = this.value.trim();
+        await window.electronAPI.updateAgentConfig(agentId, { endpoint: value });
+      });
+    })(a.id, item.querySelector('.agent-endpoint-input'));
+
+    // Prevent click on input rows from triggering agent selection
+    item.querySelector('.agent-endpoint-row').addEventListener('click', function(e) { e.stopPropagation(); });
+    item.querySelector('.agent-install-path').addEventListener('click', function(e) { e.stopPropagation(); });
   }
 
   // Attach test button handlers

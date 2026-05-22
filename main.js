@@ -1,5 +1,5 @@
 /**
- * OpenCLI Smart Assistant - Main Process
+ * Open Assistant - Main Process
  * 
  * Handles:
  * - Global shortcut registration
@@ -10,6 +10,7 @@
 
 const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, clipboard, nativeImage, screen } = require('electron');
 const path = require('path');
+const { exec, spawn } = require('child_process');
 const Store = require('electron-store');
 const { takeScreenshot } = require('./core/screenshot');
 const { pasteText, StreamingPaster, getText } = require('./core/clipboard-pure');
@@ -26,6 +27,16 @@ const store = new Store({
 // Initialize Agent Registry
 AgentRegistry.init(store);
 AgentRegistry.register(new DoubaoAppAdapter());
+
+// Sync persisted agent config to live instances on startup
+const persistedAgents = store.get('agents') || {};
+for (const [id, config] of Object.entries(persistedAgents)) {
+  const agent = AgentRegistry.getAgent(id);
+  if (agent) {
+    if (config.endpoint) agent.endpoint = config.endpoint;
+    if (config.install_path) agent.installPath = config.install_path;
+  }
+}
 
 let mainWindow;
 let overlayWindow;
@@ -170,7 +181,7 @@ function createTray() {
     tray = new Tray(trayIcon);
     rebuildTrayMenu();
 
-    tray.setToolTip('OpenCLI Smart Assistant');
+    tray.setToolTip('Open Assistant');
 
     tray.on('click', () => {
       if (mainWindow) {
@@ -192,7 +203,7 @@ function createTray() {
 function rebuildTrayMenu() {
   if (!tray) return;
 
-  const contextMenu = Menu.buildFromTemplate([
+  const menuItems = [
     {
       label: 'Open Settings',
       click: () => {
@@ -232,13 +243,26 @@ function rebuildTrayMenu() {
         }
       ]
     },
+  ];
+
+  // Add "Initialize Doubao" if the selected agent is Doubao
+  const selectedAgent = AgentRegistry.getSelected();
+  if (selectedAgent && selectedAgent.id === 'doubao-app') {
+    menuItems.push({
+      label: 'Initialize Doubao Desktop',
+      click: () => launchDoubaoWithDebug()
+    });
+  }
+
+  menuItems.push(
     { type: 'separator' },
     {
       label: 'Quit',
       click: () => app.quit()
     }
-  ]);
+  );
 
+  const contextMenu = Menu.buildFromTemplate(menuItems);
   tray.setContextMenu(contextMenu);
 }
 
@@ -247,6 +271,94 @@ function notifyConfigUpdated() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('config-updated', store.store);
   }
+}
+
+// Launch Doubao desktop app with remote debugging port
+function launchDoubaoWithDebug() {
+  // Read install_path and endpoint from agent config
+  const agentConfig = store.get('agents.doubao-app') || {};
+  const installPath = (agentConfig.install_path || '').trim();
+  const endpoint = agentConfig.endpoint || 'http://127.0.0.1:9225';
+  const match = endpoint.match(/:(\d+)$/);
+  const debugPort = match ? match[1] : '9225';
+
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const programFiles = process.env.PROGRAMFILES || '';
+  const userProfile = process.env.USERPROFILE || '';
+  const defaultExeName = 'Doubao.exe';
+
+  // Build search paths: if installPath is set, use it directly; otherwise auto-detect
+  const searchPaths = installPath
+    ? [installPath]
+    : (function() {
+        const paths = [
+          path.join(localAppData, 'doubao', defaultExeName),
+          path.join(localAppData, 'Doubao', defaultExeName),
+          path.join(localAppData, 'Programs', 'Doubao', defaultExeName),
+          path.join(userProfile, 'AppData', 'Local', 'doubao', defaultExeName),
+          path.join(userProfile, 'AppData', 'Local', 'Doubao', defaultExeName),
+          path.join(programFiles, 'doubao', defaultExeName),
+          path.join(programFiles, 'Doubao', defaultExeName),
+        ];
+        // Scan all drive letters for Program Files variants
+        const fs = require('fs');
+        const drives = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+        for (const letter of drives) {
+          const root = letter + ':\\';
+          try { fs.readdirSync(root); } catch (e) { continue; }
+          paths.push(path.join(root, 'Program Files', 'doubao', defaultExeName));
+          paths.push(path.join(root, 'Program Files', 'Doubao', defaultExeName));
+          paths.push(path.join(root, 'Program Files (x86)', 'doubao', defaultExeName));
+          paths.push(path.join(root, 'Program Files (x86)', 'Doubao', defaultExeName));
+        }
+        return paths;
+      })();
+  console.log('[Main] Doubao search paths:', searchPaths);
+
+  // Helper: find the Doubao executable
+  function findExe(callback) {
+    const fs = require('fs');
+    for (const p of searchPaths) {
+      if (fs.existsSync(p)) {
+        return callback(null, p);
+      }
+    }
+    // Fallback: try `where` command only in auto-detect mode
+    if (!installPath) {
+      exec(`where ${defaultExeName} 2>nul`, (err, stdout) => {
+        if (!err && stdout) {
+          const found = stdout.trim().split('\n')[0].trim();
+          if (found) return callback(null, found);
+        }
+        callback(new Error('找不到豆包桌面端，请确认已安装'));
+      });
+    } else {
+      callback(new Error('找不到豆包桌面端，请确认安装路径正确'));
+    }
+  }
+
+  findExe((err, exePath) => {
+    if (err) {
+      showNotification('Initialization Failed', err.message);
+      return;
+    }
+
+    // Kill any existing Doubao processes using the actual exe name
+    const exeName = path.basename(exePath);
+    exec(`taskkill /F /IM ${exeName} 2>nul`, () => {
+      // Wait briefly for process to terminate
+      setTimeout(() => {
+        const args = [`--remote-debugging-port=${debugPort}`];
+        const child = spawn(exePath, args, {
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+        console.log(`[Main] Launched Doubao with --remote-debugging-port=${debugPort}:`, exePath);
+        showNotification('Doubao Initialized', `已启动豆包（调试端口 ${debugPort}）`);
+      }, 1000);
+    });
+  });
 }
 
 // Register global shortcut
@@ -284,7 +396,7 @@ async function handleShortcut() {
     updateTrayStatus('Processing...');
 
     // Show notification
-    showNotification('OpenCLI Assistant', 'Analyzing screen...');
+    showNotification('Open Assistant', 'Analyzing screen...');
 
     // 1. Detect active window
     const activeWindow = detectActiveWindow();
@@ -437,7 +549,7 @@ function showNotification(title, body) {
 // Update tray status
 function updateTrayStatus(status) {
   if (tray) {
-    tray.setToolTip(`OpenCLI Smart Assistant - ${status}`);
+    tray.setToolTip(`Open Assistant - ${status}`);
   }
 }
 
@@ -533,12 +645,27 @@ function setupIpcHandlers() {
   // Select an agent
   ipcMain.handle('select-agent', (event, id) => {
     const success = AgentRegistry.setSelected(id);
+    rebuildTrayMenu(); // Update tray menu (e.g. show/hide Initialize Doubao)
     return { success };
   });
 
   // Test agent connection
   ipcMain.handle('test-agent-connection', async (event, id) => {
     return await AgentRegistry.testConnection(id);
+  });
+
+  // Update agent config (e.g. install_path, endpoint)
+  ipcMain.handle('update-agent-config', (event, agentId, updates) => {
+    const agentPath = `agents.${agentId}`;
+    Object.keys(updates).forEach(key => {
+      store.set(`${agentPath}.${key}`, updates[key]);
+    });
+    // Sync endpoint to live agent instance so it takes effect immediately
+    if (updates.endpoint) {
+      const agent = AgentRegistry.getAgent(agentId);
+      if (agent) agent.endpoint = updates.endpoint;
+    }
+    return { success: true };
   });
 
   // --- Overlay Window IPC (floating status bar) ---
@@ -568,7 +695,12 @@ function setupIpcHandlers() {
 
 // App lifecycle
 app.whenReady().then(() => {
-  console.log('OpenCLI Smart Assistant starting...');
+  console.log('Open Assistant starting...');
+
+  // Set AppUserModelId for Windows taskbar/task manager icon
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.opencli.assistant');
+  }
   
   // Setup IPC handlers FIRST
   setupIpcHandlers();
@@ -579,7 +711,7 @@ app.whenReady().then(() => {
   createTray();
   registerShortcut();
   
-  showNotification('OpenCLI Assistant Ready', `Press ${store.get('shortcut')} to trigger`);
+  showNotification('Open Assistant Ready', `Press ${store.get('shortcut')} to trigger`);
 });
 
 app.on('window-all-closed', (e) => {

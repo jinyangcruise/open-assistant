@@ -486,10 +486,38 @@ footer a:hover {
   font-weight: 500;
 }
 
-.agent-item-endpoint {
-  font-size: 0.8rem;
+/* Agent CDP Endpoint Row */
+.agent-endpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.agent-endpoint-label {
+  font-size: 0.75rem;
   color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.agent-endpoint-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.78rem;
   font-family: 'Courier New', monospace;
+  color: var(--text-color);
+  background: var(--card-bg);
+  transition: border-color 0.2s;
+}
+
+.agent-endpoint-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
 }
 
 .agent-item-status {
@@ -516,6 +544,46 @@ footer a:hover {
 .btn-xs {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
+}
+
+/* Agent Install Path */
+.agent-install-path {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.install-path-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.install-path-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-family: 'Courier New', monospace;
+  color: var(--text-color);
+  background: var(--card-bg);
+  transition: border-color 0.2s;
+}
+
+.install-path-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+}
+
+.install-path-input::placeholder {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 0.72rem;
 }
 
 /* Responsive */

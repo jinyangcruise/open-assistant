@@ -88,6 +88,7 @@ class AgentRegistry {
       type: a.type,
       endpoint: a.endpoint,
       enabled: a.enabled,
+      installPath: a.installPath,
       selected: a.id === selectedAgentId,
     }));
   }

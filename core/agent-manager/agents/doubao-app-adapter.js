@@ -136,6 +136,8 @@ class DoubaoAppAdapter extends BaseAgent {
           !u.startsWith('chrome://') &&
           !u.startsWith('devtools://') &&
           !u.startsWith('about:') &&
+          !u.includes('doubao-background') &&
+          !u.includes('doubao-launcher') &&
           u !== '' &&
           (t.type === 'page' || t.type === 'webview' || t.type === 'app')
         );
@@ -665,6 +667,8 @@ return response;
         !u.startsWith('chrome://') &&
         !u.startsWith('devtools://') &&
         !u.startsWith('about:') &&
+        !u.includes('doubao-background') &&
+        !u.includes('doubao-launcher') &&
         u !== '' &&
         (t.type === 'page' || t.type === 'webview' || t.type === 'app')
       );

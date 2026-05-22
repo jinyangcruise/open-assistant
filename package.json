@@ -1,7 +1,7 @@
 {
-  "name": "opencli-assistant",
+  "name": "open-assistant",
   "version": "1.0.0",
-  "description": "OpenCLI Smart Assistant - AI-powered code and document completion",
+  "description": "Open Assistant - AI-powered code and document completion",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -36,7 +36,7 @@
   },
   "build": {
     "appId": "com.opencli.assistant",
-    "productName": "OpenCLI Assistant",
+    "productName": "Open Assistant",
     "directories": {
       "output": "dist"
     },
@@ -58,7 +58,7 @@
           ]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.png"
     },
     "mac": {
       "target": [

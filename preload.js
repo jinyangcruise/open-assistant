@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAgents: () => ipcRenderer.invoke('get-agents'),
   selectAgent: (id) => ipcRenderer.invoke('select-agent', id),
   testAgentConnection: (id) => ipcRenderer.invoke('test-agent-connection', id),
+  updateAgentConfig: (agentId, updates) => ipcRenderer.invoke('update-agent-config', agentId, updates),
   
   // Event listeners
   onAnalysisResult: (callback) => {
