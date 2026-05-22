@@ -959,13 +959,17 @@ return response;
   }
 
   /**
-   * Stop Doubao's AI generation by clicking the stop/cancel button.
+   * Stop Doubao's AI generation.
    *
-   * During generation, the send button changes to a stop button.
-   * We detect generation state by checking absence of the asr_btn element,
-   * then find the stop/send button and click it directly.
+   * Strategy (in order):
+   *   1. Click the visible stop button via
+   *      [data-testid="chat_input_local_break_button"] (current Doubao).
+   *   2. Send Escape key via CDP (works if button is hidden).
+   *   3. Find div#flow-end-msg-send.send-btn-wrapper.group.\!hidden
+   *      and click its inner <button> (older Doubao versions).
+   *   4. CDP-level mouse click on the button area (general fallback).
    *
-   * @returns {Promise<boolean>} true if the stop button was found and clicked
+   * @returns {Promise<boolean>} true if generation was stopped
    */
   async stopGeneration() {
     if (!this._page) {
@@ -973,25 +977,101 @@ return response;
       return false;
     }
     try {
-      const result = await this._page.evaluate(`(function() {
-        // Check if Doubao is currently generating: asr_btn is absent during generation
-        var isGenerating = document.querySelector('[data-testid="asr_btn"]') === null;
-        if (!isGenerating) return { ok: false, reason: 'not generating' };
-
-        // Find the stop button (same element as send button, but in stop state)
-        var btn = document.getElementById('flow-end-msg-send');
-        if (!btn) {
-          btn = document.querySelector('[data-testid="chat_input_send_button"]');
-        }
-        if (!btn) return { ok: false, reason: 'no stop button found' };
+      // ── Attempt 1: Click the stop button ──
+      // During generation, Doubao shows a visible div with
+      // data-testid="chat_input_local_break_button" containing a stop icon.
+      debugLog('stopGeneration: clicking break button...');
+      const breakResult = await this._page.evaluate(`(function() {
+        var btn = document.querySelector('[data-testid="chat_input_local_break_button"]');
+        if (!btn) return { ok: false, reason: 'no break button' };
+        // Ensure it's visible (has dimensions)
+        var r = btn.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return { ok: false, reason: 'break button not visible' };
         btn.click();
-        return { ok: true };
+        return { ok: true, method: 'break-btn' };
       })()`);
-      if (result && result.ok) {
-        debugLog('stopGeneration: stop button clicked');
+      if (breakResult && breakResult.ok) {
+        debugLog('stopGeneration: stopped via break button');
         return true;
       }
-      debugLog('stopGeneration: conditions not met:', result?.reason || 'unknown');
+      debugLog('stopGeneration: break button not available:', breakResult?.reason);
+
+      // ── Attempt 2: Escape key via CDP ──
+      debugLog('stopGeneration: sending Escape key...');
+      await this._page.cdp('Input.dispatchKeyEvent', {
+        type: 'keyDown', windowsVirtualKeyCode: 27, key: 'Escape', code: 'Escape',
+      });
+      await this._page.cdp('Input.dispatchKeyEvent', {
+        type: 'keyUp', windowsVirtualKeyCode: 27, key: 'Escape', code: 'Escape',
+      });
+      await new Promise(r => setTimeout(r, 300));
+
+      // Verify: send button should become visible + enabled again
+      const check = await this._page.evaluate(`(function() {
+        var btn = document.getElementById('flow-end-msg-send');
+        if (!btn) return { stopped: false, reason: 'no button' };
+        var r = btn.getBoundingClientRect();
+        return { stopped: r.width > 0 && r.height > 0 };
+      })()`);
+      if (check && check.stopped) {
+        debugLog('stopGeneration: stopped by Escape key');
+        return true;
+      }
+
+      // ── Attempt 3: Spec-compliant ──
+      //   Find div#flow-end-msg-send.send-btn-wrapper.group.\!hidden
+      //   and click its inner <button>
+      const result = await this._page.evaluate(`(function() {
+        var container = document.getElementById('flow-end-msg-send');
+        if (container &&
+            container.classList.contains('send-btn-wrapper') &&
+            container.classList.contains('group') &&
+            container.classList.contains('!hidden')) {
+          var btn = container.querySelector('button');
+          if (btn) {
+            btn.click();
+            return { ok: true, method: 'spec-inner-btn' };
+          }
+          container.click();
+          return { ok: true, method: 'spec-container' };
+        }
+
+        var btn2 = document.querySelector('[data-testid="chat_input_send_button"]');
+        if (btn2) {
+          btn2.click();
+          return { ok: true, method: 'testid' };
+        }
+
+        return { ok: false, reason: 'no button found' };
+      })()`);
+      if (result && result.ok) {
+        debugLog('stopGeneration: clicked (' + result.method + ')');
+        return true;
+      }
+      debugLog('stopGeneration: JS click failed:', result?.reason);
+
+      // ── Attempt 4: CDP-level mouse click ──
+      debugLog('stopGeneration: trying CDP mouse click...');
+      var rect = await this._page.evaluate(`(function() {
+        var el = document.getElementById('flow-end-msg-send') ||
+                 document.querySelector('[data-testid="chat_input_send_button"]');
+        if (!el) return null;
+        var r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      })()`);
+      if (rect && rect.w > 0 && rect.h > 0) {
+        var cx = Math.round(rect.x + rect.w / 2);
+        var cy = Math.round(rect.y + rect.h / 2);
+        await this._page.cdp('Input.dispatchMouseEvent', {
+          type: 'mousePressed', x: cx, y: cy, button: 'left', clickCount: 1,
+        });
+        await this._page.cdp('Input.dispatchMouseEvent', {
+          type: 'mouseReleased', x: cx, y: cy, button: 'left', clickCount: 1,
+        });
+        debugLog('stopGeneration: CDP mouse click sent');
+        return true;
+      }
+      debugLog('stopGeneration: all attempts failed');
       return false;
     } catch (e) {
       debugLog('stopGeneration failed:', e.message);
