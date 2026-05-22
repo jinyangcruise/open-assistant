@@ -5,42 +5,9 @@
 document.addEventListener('DOMContentLoaded', () => {
   const cancelBtn = document.getElementById('cancelBtn');
   const bar = document.querySelector('.overlay-bar');
-  const debugEl = document.getElementById('debugInfo');
 
   let isDragging = false;
   let zeroMovementCount = 0; // consecutive mousemove with movementX/Y=0 during drag
-
-  // ── Real-time position/size debug display ──
-  let mainPosCache = { x: 0, y: 0 };
-
-  // Query main process window position
-  function updateMainPos() {
-    if (window.electronAPI && window.electronAPI.getWindowPosition) {
-      window.electronAPI.getWindowPosition().then(pos => {
-        mainPosCache = pos;
-      }).catch(() => {});
-    }
-  }
-
-  function updateDebugInfo() {
-    updateMainPos();
-    const r = { sx: window.screenX, sy: window.screenY, iw: window.innerWidth, ih: window.innerHeight };
-    debugEl.textContent = `R:(${r.sx},${r.sy}) ${r.iw}×${r.ih}  |  M:(${mainPosCache.x},${mainPosCache.y})`;
-  }
-
-  // Poll position 10 times/second
-  setInterval(updateDebugInfo, 100);
-  updateDebugInfo(); // initial
-
-  // Periodically send debug position to main process for console logging
-  function sendDebugToMain() {
-    window.electronAPI.sendDebugPos(
-      window.screenX, window.screenY,
-      window.innerWidth, window.innerHeight
-    );
-  }
-  setInterval(sendDebugToMain, 2000);
-  sendDebugToMain(); // immediate first send
 
   // ── Drag logic ──
 

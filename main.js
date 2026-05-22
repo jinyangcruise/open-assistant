@@ -576,21 +576,7 @@ function setupIpcHandlers() {
     if (isDragDebug) console.log('[Overlay]', ...args);
   });
 
-  // Log renderer position + main process position for debugging
-  ipcMain.on('overlay-debug-pos', (event, screenX, screenY, innerW, innerH) => {
-    if (!isDragDebug) return;
-    let mx = -1, my = -1;
-    if (overlayWindow && !overlayWindow.isDestroyed()) {
-      const p = overlayWindow.getPosition();
-      mx = p[0]; my = p[1];
-    }
-    console.log('[DebugPos] R:(%d,%d) %d×%d  |  M:(%d,%d)  diff=(%d,%d)',
-      screenX, screenY, innerW, innerH,
-      mx, my,
-      screenX - mx, screenY - my
-    );
-  });
-  // Get config
+    // Get config
   ipcMain.handle('get-config', () => {
     return store.store;
   });
@@ -764,12 +750,6 @@ function setupIpcHandlers() {
     }
   });
 
-  // Overlay window position query (for debug display)
-  ipcMain.handle('overlay-get-position', () => {
-    if (!overlayWindow || overlayWindow.isDestroyed()) return { x: -1, y: -1 };
-    const [x, y] = overlayWindow.getPosition();
-    return { x, y };
-  });
 }
 
 // App lifecycle

@@ -23,10 +23,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   /** Forward a debug log message to the main process terminal (--dev only) */
   debugLog: (...args) => ipcRenderer.send('overlay-debug-log', ...args),
-
-  /** Get window position from main process (BrowserWindow.getPosition) */
-  getWindowPosition: () => ipcRenderer.invoke('overlay-get-position'),
-
-  /** Send renderer position/size to main process for debug logging */
-  sendDebugPos: (screenX, screenY, innerW, innerH) => ipcRenderer.send('overlay-debug-pos', screenX, screenY, innerW, innerH),
 });
