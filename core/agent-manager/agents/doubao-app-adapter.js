@@ -522,8 +522,18 @@ class DoubaoAppAdapter extends BaseAgent {
       const text = args[1]?.value;
 
       if (tag === '__SSE_TEXT__' && typeof text === 'string') {
+        // Sequence number (3rd arg) distinguishes new wrapper from old.
+        // Old wrapper fires __SSE_TEXT__ without seq — we skip those
+        // to avoid duplicates during the transition period.
+        const seq = args[2]?.value;
+        if (typeof seq !== 'number') return;
+        console.log('[DoubaoAdapter] SSE chunk:', JSON.stringify(text));
         fullText += text;
         if (onChunk) onChunk(text);
+      } else if (tag === '__SSE_RAW__' && typeof text === 'string') {
+        console.log('[DoubaoAdapter] SSE raw event:', text);
+      } else if (tag === '__SSE_EVENT__' && typeof text === 'string') {
+        console.log('[DoubaoAdapter] SSE parsed:', text);
       } else if (tag === '__SSE_DONE__') {
         if (!done) {
           done = true;
@@ -545,9 +555,55 @@ class DoubaoAppAdapter extends BaseAgent {
     // Inject fetch interceptor — clones SSE response, reads stream,
     // extracts text from CHUNK_DELTA / STREAM_MSG_NOTIFY events,
     // sends chunks via console.debug('__SSE_TEXT__', text)
+    // Refactored injectScript: _proc stored as window.__sseProc, updated
+    // on every call. Fetch wrapper installed only once. STREAM_CHUNK
+    // events are now handled (they carry text like "氏" that CHUNK_DELTA
+    // may miss). A sequence counter on __SSE_TEXT__ deduplicates output
+    // when an old wrapper is still in the chain (transition period).
     const injectScript = `(function(){
-if(window.__sseInterceptorInstalled)return;
-window.__sseInterceptorInstalled=true;
+// === ALWAYS update _proc (takes effect immediately) ===
+window.__sseProc=function _proc(raw){
+console.debug('__SSE_RAW__',raw.substring(0,300));
+var lines=raw.split('\\n');
+var et='',ed='';
+for(var i=0;i<lines.length;i++){
+var l=lines[i];
+if(l.indexOf('event:')===0)et=l.slice(6).trim();
+else if(l.indexOf('data:')===0)ed=l.slice(5).trim();
+}
+if(!et&&!ed){console.debug('__SSE_EVENT__','skip: no event, no data');return;}
+if(!et){console.debug('__SSE_EVENT__','skip: no event type, data='+ed.substring(0,150));return;}
+if(!ed){console.debug('__SSE_EVENT__','skip: no data, event='+et);return;}
+console.debug('__SSE_EVENT__','event='+et+' data='+ed.substring(0,300));
+try{
+var d=JSON.parse(ed);
+if(et==='CHUNK_DELTA'&&d.text){
+if(!window.__sseTextSeq)window.__sseTextSeq=0;
+console.debug('__SSE_TEXT__',d.text,++window.__sseTextSeq);
+}else if(et==='STREAM_MSG_NOTIFY'&&d.content&&d.content.content_block){
+var blocks=d.content.content_block;
+for(var j=0;j<blocks.length;j++){
+var t=blocks[j]&&blocks[j].content&&blocks[j].content.text_block&&blocks[j].content.text_block.text;
+if(t){if(!window.__sseTextSeq)window.__sseTextSeq=0;console.debug('__SSE_TEXT__',t,++window.__sseTextSeq);}
+}
+}else if(et==='STREAM_CHUNK'&&d.patch_op){
+// STREAM_CHUNK delivers incremental text via patch_op content blocks
+for(var k=0;k<d.patch_op.length;k++){
+var op=d.patch_op[k];
+if(op.patch_object===1&&op.patch_value&&op.patch_value.content_block){
+var cblocks=op.patch_value.content_block;
+for(var m=0;m<cblocks.length;m++){
+var ct=cblocks[m]&&cblocks[m].content&&cblocks[m].content.text_block&&cblocks[m].content.text_block.text;
+if(ct){if(!window.__sseTextSeq)window.__sseTextSeq=0;console.debug('__SSE_TEXT__',ct,++window.__sseTextSeq);}
+}
+}
+}
+}
+}catch(e){console.debug('__SSE_EVENT__','json_parse_fail:'+(e&&e.message));}
+};
+// === Only install the fetch wrapper once ===
+if(window.__sseWrapperInstalled)return;
+window.__sseWrapperInstalled=true;
 var _orig=window.fetch;
 window.fetch=async function(){
 var response=await _orig.apply(this,arguments);
@@ -562,7 +618,7 @@ reader.read().then(function(r){
 if(r.done){
 if(buffer.trim()){
 var events=buffer.split('\\n\\n');
-for(var i=0;i<events.length;i++)_proc(events[i]);
+for(var i=0;i<events.length;i++)window.__sseProc(events[i]);
 }
 console.debug('__SSE_DONE__','');
 return;
@@ -570,33 +626,12 @@ return;
 buffer+=decoder.decode(r.value,{stream:true});
 var parts=buffer.split('\\n\\n');
 buffer=parts.pop();
-for(var i=0;i<parts.length;i++)_proc(parts[i]);
+for(var i=0;i<parts.length;i++)window.__sseProc(parts[i]);
 pump();
 }).catch(function(e){
 console.debug('__SSE_ERR__',(e&&e.message)||'');
 });
 })();
-function _proc(raw){
-var lines=raw.split('\\n');
-var et='',ed='';
-for(var i=0;i<lines.length;i++){
-var l=lines[i];
-if(l.indexOf('event:')===0)et=l.slice(6).trim();
-else if(l.indexOf('data:')===0)ed=l.slice(5).trim();
-}
-if(!et||!ed)return;
-try{
-var d=JSON.parse(ed);
-if(et==='CHUNK_DELTA'&&d.text)console.debug('__SSE_TEXT__',d.text);
-else if(et==='STREAM_MSG_NOTIFY'&&d.content&&d.content.content_block){
-var blocks=d.content.content_block;
-for(var j=0;j<blocks.length;j++){
-var t=blocks[j]&&blocks[j].content&&blocks[j].content.text_block&&blocks[j].content.text_block.text;
-if(t)console.debug('__SSE_TEXT__',t);
-}
-}
-}catch(e){}
-}
 }
 return response;
 };
