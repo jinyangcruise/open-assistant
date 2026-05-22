@@ -120,61 +120,79 @@ class DoubaoAppAdapter extends BaseAgent {
   }
 
   /**
-   * Ensure the connected page is on a Doubao chat page with a visible input.
-   * If connected to an internal/background page, find the real chat target
-   * and reconnect. Does NOT create new conversations.
-   * @param {Object} page - CDPPage instance (may be stale after reconnect)
-   * @returns {Promise<Object>} The (possibly reconnected) page
+   * Find a Doubao chat page by positive DOM verification.
+   *
+   * Fetches all CDP targets, connects to each candidate (page/webview/app
+   * type with a WebSocket URL), and checks for the chat input element.
+   * Keeps the connection to the first verified chat page found.
+   *
+   * Replaces the old exclusion-based approach (which required updating
+   * whenever Doubao added new internal page types like doubao-text-picker).
+   *
+   * @returns {Promise<Object>} CDPPage connected to the verified chat page
    */
-  async _ensureChatPage(page) {
-    const currentUrl = await page.evaluate('window.location.href');
+  async _findOrVerifyChatPage() {
+    // 1. Fetch all CDP targets
+    let targets;
+    try {
+      targets = await _fetchTargets(this.endpoint);
+    } catch (err) {
+      throw new Error(
+        `无法连接到豆包桌面端（${this.endpoint}）。` +
+        `请确认豆包已启动并开启了远程调试端口。`
+      );
+    }
 
-    // If on an internal/background page, find the real chat target
-    if (!currentUrl ||
-        currentUrl.startsWith('chrome://') ||
-        currentUrl.startsWith('devtools://') ||
-        currentUrl === 'about:blank') {
-      const targets = await _fetchTargets(this.endpoint);
-      const chatTarget = targets.find((t) => {
-        const u = (t.url || '').toLowerCase();
-        return (
-          t.webSocketDebuggerUrl &&
-          !u.startsWith('chrome://') &&
-          !u.startsWith('devtools://') &&
-          !u.startsWith('about:') &&
-          !u.includes('doubao-background') &&
-          !u.includes('doubao-launcher') &&
-          !u.includes('doubao-text-picker') &&
-          u !== '' &&
-          (t.type === 'page' || t.type === 'webview' || t.type === 'app')
-        );
-      });
+    if (!targets || targets.length === 0) {
+      throw new Error('豆包桌面端未返回任何页面目标，请确认豆包已启动。');
+    }
 
-      if (chatTarget) {
-        this.disconnect();
-        page = await this.connect(chatTarget.webSocketDebuggerUrl);
-      } else {
-        throw new Error(
-          `无法找到豆包聊天页面。连接到后台页面: "${currentUrl}"，` +
-          `且未找到其他可用的聊天页面目标。请确保豆包桌面端已打开。`,
+    // 2. Filter candidates: must have wsUrl + be a DOM-bearing type
+    const candidates = targets.filter((t) =>
+      t.webSocketDebuggerUrl &&
+      (t.type === 'page' || t.type === 'webview' || t.type === 'app')
+    );
+
+    if (candidates.length === 0) {
+      const types = [...new Set(targets.map((t) => t.type))].join(', ');
+      debugLog('_findOrVerifyChatPage: no candidates. Available types:', types);
+      throw new Error(
+        '未找到可用的豆包页面目标。请打开豆包聊天页面后重试。' +
+        `（当前可用目标类型: ${types}）`
+      );
+    }
+
+    debugLog('_findOrVerifyChatPage: scanning', candidates.length, 'candidates');
+
+    // 3. Probe each candidate: connect briefly and check for chat input
+    const { CDPBridge } = await this._getOpencliCdp();
+    for (const t of candidates) {
+      let bridge = null;
+      try {
+        bridge = new CDPBridge();
+        const page = await bridge.connect({ cdpEndpoint: t.webSocketDebuggerUrl });
+        const hasInput = await page.evaluate(
+          `document.querySelector('${SEL.INPUT}') !== null`,
         );
+        if (hasInput) {
+          debugLog('_findOrVerifyChatPage: found chat page —', t.url);
+          // Keep this connection
+          this._bridge = bridge;
+          this._page = page;
+          return page;
+        }
+      } catch (e) {
+        debugLog('_findOrVerifyChatPage: probe failed for', t.url, '—', e.message);
+      }
+      if (bridge) {
+        try { bridge.close(); } catch (_) { /* ignore */ }
       }
     }
 
-    // Wait for the chat input to appear (up to 8s)
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const hasInput = await page.evaluate(
-        `document.querySelector('${SEL.INPUT}') !== null`,
-      );
-      if (hasInput) return page;
-      await sleep(1);
-    }
-
-    const title = await page.evaluate('document.title');
-    const url = await page.evaluate('window.location.href');
+    // 4. None matched
     throw new Error(
-      `无法找到豆包聊天输入框。页面标题: "${title}", URL: "${url}". ` +
-      `请确保豆包桌面端已打开且处于聊天页面。`,
+      '无法找到豆包聊天页面。请确保豆包桌面端已打开且处于聊天页面。' +
+      `（共检查 ${candidates.length} 个目标，均未包含聊天输入框）`
     );
   }
 
@@ -679,58 +697,6 @@ return response;
     return capturePromise;
   }
 
-  /**
-   * Pre-check: verify the CDP endpoint has a usable chat page target.
-   * Called at the start of analyze() to fail fast with a friendly message.
-   *
-   * @param {string} endpoint - CDP HTTP endpoint (e.g. http://127.0.0.1:9225)
-   * @returns {Promise<void>}
-   */
-  async _preCheckTargets(endpoint) {
-    let targets;
-    try {
-      targets = await _fetchTargets(endpoint || this.endpoint);
-    } catch (err) {
-      throw new Error(
-        `无法连接到豆包桌面端（${endpoint || this.endpoint}）。` +
-        `请确认豆包已启动并开启了远程调试端口。`
-      );
-    }
-
-    if (!targets || targets.length === 0) {
-      throw new Error('豆包桌面端未返回任何页面目标，请确认豆包已启动。');
-    }
-
-    // Check for valid chat page targets
-    const chatTarget = targets.find((t) => {
-      const u = (t.url || '').toLowerCase();
-      return (
-        t.webSocketDebuggerUrl &&
-        !u.startsWith('chrome://') &&
-        !u.startsWith('devtools://') &&
-        !u.startsWith('about:') &&
-        !u.includes('doubao-background') &&
-        !u.includes('doubao-launcher') &&
-        !u.includes('doubao-text-picker') &&
-        u !== '' &&
-        (t.type === 'page' || t.type === 'webview' || t.type === 'app')
-      );
-    });
-
-    if (!chatTarget) {
-      // List available target types for debugging
-      const types = [...new Set(targets.map((t) => t.type))].join(', ');
-      const urls = targets.map((t) => (t.url || '(empty)')).filter(Boolean);
-      debugLog('preCheck: no chat target. Available types:', types, 'urls:', urls);
-      throw new Error(
-        '豆包聊天窗口未打开。请打开豆包聊天页面后重试。' +
-        `（当前可用目标类型: ${types}）`
-      );
-    }
-
-    debugLog('preCheck: found chat target —', chatTarget.url);
-  }
-
   // ===================================================================
   //  Main analyze method — dispatches to selected mode
   // ===================================================================
@@ -759,15 +725,8 @@ return response;
     let tmpFile = null;
 
     try {
-      // 0. Pre-check: verify CDP endpoint has a usable chat target
-      await this._preCheckTargets(this.endpoint);
-
-      // 1. Force fresh connection
-      this.disconnect();
-      page = await this.connect();
-
-      // 2. Ensure we're on a proper chat page
-      page = await this._ensureChatPage(page);
+      // 0. Find and connect to a verified Doubao chat page (positive DOM check)
+      page = await this._findOrVerifyChatPage();
 
       // 3. Save screenshot and upload
       tmpFile = this._saveTempScreenshot(screenshotBuffer);
