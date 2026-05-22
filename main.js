@@ -226,11 +226,6 @@ function rebuildTrayMenu() {
         }
       }
     },
-    {
-      label: 'Trigger Assistant',
-      accelerator: store.get('shortcut'),
-      click: () => handleShortcut()
-    },
     { type: 'separator' },
     {
       label: 'Output',
@@ -257,9 +252,9 @@ function rebuildTrayMenu() {
     },
   ];
 
-  // Add "Initialize Doubao" if the selected agent is Doubao
-  const selectedAgent = AgentRegistry.getSelected();
-  if (selectedAgent && selectedAgent.id === 'doubao-app') {
+  // Add "Initialize Doubao" if the doubao-app agent is selected
+  const selectedIds = AgentRegistry.getSelectedIds();
+  if (selectedIds.includes('doubao-app')) {
     menuItems.push({
       label: 'Initialize Doubao Desktop',
       click: () => launchDoubaoWithDebug()
@@ -373,28 +368,41 @@ function launchDoubaoWithDebug() {
   });
 }
 
-// Register global shortcut
-function registerShortcut() {
-  const shortcut = store.get('shortcut');
-  
-  if (globalShortcut.isRegistered(shortcut)) {
-    globalShortcut.unregister(shortcut);
+// Register global shortcuts for all agents
+function registerAllShortcuts() {
+  globalShortcut.unregisterAll();
+
+  const agents = AgentRegistry.getAll();
+  const registeredShortcuts = new Set();
+  let count = 0;
+
+  for (const agent of agents) {
+    const shortcut = store.get(`agents.${agent.id}.shortcut`);
+    if (!shortcut) continue;
+
+    if (registeredShortcuts.has(shortcut)) {
+      console.warn(`[Main] Shortcut "${shortcut}" conflict: ${agent.id} skipped (already used by another agent)`);
+      continue;
+    }
+
+    const registered = globalShortcut.register(shortcut, () => {
+      handleShortcut(agent.id);
+    });
+
+    if (registered) {
+      registeredShortcuts.add(shortcut);
+      count++;
+      console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}`);
+    } else {
+      console.error(`[Main] Failed to register shortcut for ${agent.id}: ${shortcut}`);
+    }
   }
 
-  const registered = globalShortcut.register(shortcut, async () => {
-    await handleShortcut();
-  });
-
-  if (!registered) {
-    console.error(`Failed to register shortcut: ${shortcut}`);
-    showNotification('Failed to register shortcut', 'Please check for conflicts');
-  } else {
-    console.log(`Shortcut registered: ${shortcut}`);
-  }
+  console.log(`[Main] Registered ${count} shortcut(s) for ${agents.length} agent(s)`);
 }
 
 // Main shortcut handler
-async function handleShortcut() {
+async function handleShortcut(agentId) {
   if (isProcessing) {
     showNotification('Already Processing', 'Please wait for the current request to complete');
     return;
@@ -431,13 +439,13 @@ async function handleShortcut() {
       }
     }
 
-    // 4. Analyze with selected AI Agent (with optional streaming)
-    const agent = AgentRegistry.getSelected();
+    // 4. Analyze with specified AI Agent (with optional streaming)
+    const agent = AgentRegistry.getAgent(agentId);
     currentAdapter = agent;
     console.log('Analyzing with agent:', agent ? agent.id : 'none');
 
     if (!agent) {
-      throw new Error('No AI Agent selected. Please configure an agent in Settings.');
+      throw new Error(`AI Agent "${agentId}" not found. Please check configuration.`);
     }
 
     // Prepare output based on output_mode and auto_insert settings
@@ -589,21 +597,13 @@ function setupIpcHandlers() {
   ipcMain.handle('update-config', (event, updates) => {
     store.set(updates);
     
-    // Re-register shortcut if it changed
-    if (updates.shortcut) {
-      registerShortcut();
-    }
+    // Re-register all shortcuts (in case agent configs changed)
+    registerAllShortcuts();
     
     // Rebuild tray menu to reflect config changes (e.g. Output mode)
     rebuildTrayMenu();
     
     return store.store;
-  });
-
-  // Trigger assistant manually from UI
-  ipcMain.handle('trigger-assistant', async () => {
-    await handleShortcut();
-    return { success: true };
   });
 
   // Get logs
@@ -663,15 +663,15 @@ function setupIpcHandlers() {
   ipcMain.handle('get-agents', () => {
     return {
       agents: AgentRegistry.getAll(),
-      selectedId: AgentRegistry.getSelected()?.id || null
+      selectedIds: AgentRegistry.getSelectedIds()
     };
   });
 
-  // Select an agent
-  ipcMain.handle('select-agent', (event, id) => {
-    const success = AgentRegistry.setSelected(id);
+  // Toggle an agent's selected state (multi-select)
+  ipcMain.handle('toggle-agent', (event, id) => {
+    const isSelected = AgentRegistry.toggleSelected(id);
     rebuildTrayMenu(); // Update tray menu (e.g. show/hide Initialize Doubao)
-    return { success };
+    return { success: true, selected: isSelected };
   });
 
   // Test agent connection
@@ -679,8 +679,18 @@ function setupIpcHandlers() {
     return await AgentRegistry.testConnection(id);
   });
 
-  // Update agent config (e.g. install_path, endpoint)
+  // Update agent config (e.g. install_path, endpoint, shortcut)
   ipcMain.handle('update-agent-config', (event, agentId, updates) => {
+    // If updating shortcut, check for conflicts with other agents
+    if (updates.shortcut) {
+      const agents = store.get('agents') || {};
+      for (const [otherId, otherConfig] of Object.entries(agents)) {
+        if (otherId !== agentId && otherConfig.shortcut === updates.shortcut) {
+          return { success: false, error: '快捷键已被其他 Agent 使用' };
+        }
+      }
+    }
+
     const agentPath = `agents.${agentId}`;
     Object.keys(updates).forEach(key => {
       store.set(`${agentPath}.${key}`, updates[key]);
@@ -690,6 +700,35 @@ function setupIpcHandlers() {
       const agent = AgentRegistry.getAgent(agentId);
       if (agent) agent.endpoint = updates.endpoint;
     }
+    // Re-register all shortcuts in case shortcut config changed
+    registerAllShortcuts();
+    return { success: true };
+  });
+
+  // Check if a shortcut is available (not in use by system/other apps)
+  ipcMain.handle('check-shortcut', (event, shortcut) => {
+    if (!shortcut) return { available: false };
+    try {
+      const registered = globalShortcut.register(shortcut, () => {});
+      if (registered) {
+        globalShortcut.unregister(shortcut);
+        return { available: true };
+      }
+      return { available: false };
+    } catch (e) {
+      return { available: false };
+    }
+  });
+
+  // Suspend all global shortcuts (for shortcut recording)
+  ipcMain.handle('suspend-shortcuts', () => {
+    globalShortcut.unregisterAll();
+    return { success: true };
+  });
+
+  // Resume all agent shortcuts
+  ipcMain.handle('resume-shortcuts', () => {
+    registerAllShortcuts();
     return { success: true };
   });
 
@@ -782,9 +821,7 @@ app.whenReady().then(() => {
   createMainWindow();
   createOverlayWindow();
   createTray();
-  registerShortcut();
-  
-  showNotification('Open Assistant Ready', `Press ${store.get('shortcut')} to trigger`);
+  registerAllShortcuts();
 });
 
 app.on('window-all-closed', (e) => {

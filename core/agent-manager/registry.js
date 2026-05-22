@@ -1,16 +1,18 @@
 /**
  * AgentRegistry - Registry for managing AI Agent adapters
  *
- * Provides a central registry for registering, discovering, and switching
+ * Provides a central registry for registering, discovering, and selecting
  * between different AI Agents (doubao-app, chatgpt-app, web agents, etc.).
- * Persists the selected agent via electron-store.
+ * Supports multi-select: multiple agents can be selected simultaneously.
+ * Each agent is triggered individually by its own shortcut key.
+ * Persists the selected agent IDs via electron-store.
  */
 
 const BaseAgent = require('./base-agent');
 
 /** @type {Map<string, BaseAgent>} */
 const agents = new Map();
-let selectedAgentId = 'doubao-app';
+let selectedAgentIds = ['doubao-app'];
 /** @type {import('electron-store')|null} */
 let store = null;
 
@@ -23,10 +25,13 @@ class AgentRegistry {
   static init(electronStore) {
     store = electronStore;
 
-    // Load persisted selection
-    const saved = store.get('selected_agent');
-    if (saved && agents.has(saved)) {
-      selectedAgentId = saved;
+    // Load persisted selection (array of IDs)
+    const saved = store.get('selected_agents');
+    if (Array.isArray(saved) && saved.length > 0) {
+      const valid = saved.filter(id => agents.has(id));
+      if (valid.length > 0) {
+        selectedAgentIds = valid;
+      }
     }
   }
 
@@ -40,9 +45,11 @@ class AgentRegistry {
     }
     agents.set(agent.id, agent);
 
-    // If this is the first registered agent, make it the default
+    // If this is the first registered agent, make it selected by default
     if (agents.size === 1) {
-      selectedAgentId = agent.id;
+      if (!selectedAgentIds.includes(agent.id)) {
+        selectedAgentIds.push(agent.id);
+      }
     }
   }
 
@@ -56,30 +63,64 @@ class AgentRegistry {
   }
 
   /**
-   * Get the currently selected agent.
+   * Get the first selected agent (for backward compatibility).
    * @returns {BaseAgent|undefined}
    */
   static getSelected() {
-    return agents.get(selectedAgentId);
+    return agents.get(selectedAgentIds[0]);
   }
 
   /**
-   * Set the currently selected agent.
-   * @param {string} id
-   * @returns {boolean} Whether the selection was successful
+   * Get all selected agent IDs.
+   * @returns {string[]}
    */
-  static setSelected(id) {
+  static getSelectedIds() {
+    return [...selectedAgentIds];
+  }
+
+  /**
+   * Toggle an agent's selected state.
+   * If the agent becomes selected and it was not previously, it is added.
+   * If it was selected, it is removed.
+   * Ensures at least one agent remains selected.
+   * @param {string} id
+   * @returns {boolean} Whether the agent is now selected
+   */
+  static toggleSelected(id) {
     if (!agents.has(id)) return false;
-    selectedAgentId = id;
+    const idx = selectedAgentIds.indexOf(id);
+    if (idx >= 0) {
+      // Don't deselect if it's the last one
+      if (selectedAgentIds.length > 1) {
+        selectedAgentIds.splice(idx, 1);
+      }
+    } else {
+      selectedAgentIds.push(id);
+    }
     if (store) {
-      store.set('selected_agent', id);
+      store.set('selected_agents', selectedAgentIds);
+    }
+    return selectedAgentIds.includes(id);
+  }
+
+  /**
+   * Set the selected agents to an exact list of IDs.
+   * @param {string[]} ids
+   * @returns {boolean} Whether the selection was updated
+   */
+  static setSelectedAgents(ids) {
+    const valid = ids.filter(id => agents.has(id));
+    if (valid.length === 0) return false;
+    selectedAgentIds = valid;
+    if (store) {
+      store.set('selected_agents', selectedAgentIds);
     }
     return true;
   }
 
   /**
    * Get a list of all registered agents (metadata only, not full instances).
-   * @returns {Array<{id: string, name: string, type: string, endpoint: string, enabled: boolean, selected: boolean}>}
+   * @returns {Array<{id: string, name: string, type: string, endpoint: string, enabled: boolean, installPath: string, shortcut: string, selected: boolean}>}
    */
   static getAll() {
     return Array.from(agents.values()).map((a) => ({
@@ -89,7 +130,8 @@ class AgentRegistry {
       endpoint: a.endpoint,
       enabled: a.enabled,
       installPath: a.installPath,
-      selected: a.id === selectedAgentId,
+      shortcut: store ? store.get(`agents.${a.id}.shortcut`) || '' : '',
+      selected: selectedAgentIds.includes(a.id),
     }));
   }
 

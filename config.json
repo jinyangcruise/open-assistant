@@ -1,5 +1,4 @@
 {
-  "shortcut": "Control+Space",
   "timeout_seconds": 30,
   "auto_insert": true,
   "screenshot_region": "full",
@@ -10,14 +9,15 @@
   "log_level": "info",
   "prompts": [],
   "selected_prompt_id": "system-default",
-  "selected_agent": "doubao-app",
+  "selected_agents": ["doubao-app"],
   "agents": {
     "doubao-app": {
       "name": "豆包桌面端",
       "type": "electron",
       "endpoint": "http://127.0.0.1:9225",
       "enabled": true,
-      "install_path": ""
+      "install_path": "",
+      "shortcut": ""
     }
   }
 }

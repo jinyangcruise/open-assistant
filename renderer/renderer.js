@@ -4,14 +4,10 @@
 
 // State
 let config = {};
-let isProcessing = false;
 
 // DOM Elements
-const triggerBtn = document.getElementById('triggerBtn');
 const configForm = document.getElementById('configForm');
 const resetBtn = document.getElementById('resetBtn');
-const shortcutDisplay = document.getElementById('shortcutDisplay');
-const statusIndicator = document.getElementById('statusIndicator');
 const resultContainer = document.getElementById('resultContainer');
 const logContainer = document.getElementById('logContainer');
 
@@ -22,7 +18,11 @@ let editingPromptId = null;
 
 // Agent state
 let agents = [];
-let selectedAgentId = null;
+let selectedAgentIds = [];
+
+// Shortcut recorder state
+let recorderAgentId = null;
+let recorderShortcut = null;
 
 // Prompt DOM Elements
 const promptsList = document.getElementById('promptsList');
@@ -63,23 +63,12 @@ async function init() {
 }
 
 function setupEventListeners() {
-  // Trigger button
-  triggerBtn.addEventListener('click', async () => {
-    await triggerAssistant();
-  });
-  
   // Auto-save on any form field change
   const formInputs = configForm.querySelectorAll('input, select');
   for (const input of formInputs) {
     input.addEventListener('change', async () => {
       await saveConfig();
     });
-    // For text inputs (shortcut), also save on blur
-    if (input.type === 'text') {
-      input.addEventListener('blur', async () => {
-        await saveConfig();
-      });
-    }
   }
   
   // Reset button
@@ -96,35 +85,13 @@ function setupEventListeners() {
   
   // Agent management
   setupAgentEventListeners();
-}
-
-async function triggerAssistant() {
-  if (isProcessing) {
-    addLog('Already processing, please wait', 'warning');
-    return;
-  }
   
-  isProcessing = true;
-  triggerBtn.disabled = true;
-  triggerBtn.textContent = 'Processing...';
-  updateStatus('processing', 'Processing...');
-  
-  try {
-    addLog('Triggering assistant...', 'info');
-    await window.electronAPI.triggerAssistant();
-  } catch (error) {
-    addLog(`Error: ${error.message}`, 'error');
-  } finally {
-    isProcessing = false;
-    triggerBtn.disabled = false;
-    triggerBtn.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-      </svg>
-      Trigger Assistant
-    `;
-    updateStatus('ready', 'Ready');
-  }
+  // Shortcut recorder modal events
+  document.getElementById('recorderConfirm').addEventListener('click', confirmShortcut);
+  document.getElementById('recorderCancel').addEventListener('click', cancelShortcut);
+  document.getElementById('shortcutRecorderOverlay').addEventListener('click', function(e) {
+    if (e.target === this) cancelShortcut();
+  });
 }
 
 async function saveConfig() {
@@ -145,7 +112,6 @@ async function saveConfig() {
   
   try {
     config = await window.electronAPI.updateConfig(updates);
-    shortcutDisplay.textContent = config.shortcut.replace('Control', 'Ctrl');
     addLog('Configuration saved', 'success');
   } catch (error) {
     addLog(`Failed to save config: ${error.message}`, 'error');
@@ -153,15 +119,12 @@ async function saveConfig() {
 }
 
 function populateForm(config) {
-  document.getElementById('shortcut').value = config.shortcut || 'Control+Space';
   document.getElementById('timeout').value = config.timeout_seconds || 30;
   document.getElementById('autoInsert').value = config.auto_insert !== false ? 'true' : 'false';
   document.getElementById('showNotifications').checked = config.show_notifications !== false;
   document.getElementById('logLevel').value = config.log_level || 'info';
   document.getElementById('responseMode').value = config.response_mode || 'sse-fetch';
   document.getElementById('outputMode').value = config.output_mode || 'streaming';
-  
-  shortcutDisplay.textContent = (config.shortcut || 'Control+Space').replace('Control', 'Ctrl');
 }
 
 function handleAnalysisResult(result) {
@@ -199,21 +162,6 @@ function displayResult(result) {
   // Keep only last 10 results
   while (resultContainer.children.length > 10) {
     resultContainer.removeChild(resultContainer.lastChild);
-  }
-}
-
-function updateStatus(status, text) {
-  const dot = statusIndicator.querySelector('.status-dot');
-  const textEl = statusIndicator.querySelector('.status-text');
-  
-  textEl.textContent = text;
-  
-  if (status === 'processing') {
-    dot.style.backgroundColor = '#fbbf24';
-  } else if (status === 'error') {
-    dot.style.backgroundColor = '#ef4444';
-  } else {
-    dot.style.backgroundColor = '#10b981';
   }
 }
 
@@ -396,14 +344,14 @@ async function savePrompt() {
 const agentsList = document.getElementById('agentsList');
 
 function setupAgentEventListeners() {
-  // No specific button listeners needed - agents are click-to-select
+  // No specific setup needed; event handlers are attached in renderAgents()
 }
 
 async function loadAgents() {
   try {
     var result = await window.electronAPI.getAgents();
     agents = result.agents || [];
-    selectedAgentId = result.selectedId;
+    selectedAgentIds = result.selectedIds || [];
     renderAgents();
   } catch (error) {
     addLog('Failed to load agents: ' + error.message, 'error');
@@ -420,16 +368,21 @@ function renderAgents() {
 
   for (var i = 0; i < agents.length; i++) {
     var a = agents[i];
-    var isSelected = a.id === selectedAgentId;
+    var isSelected = selectedAgentIds.includes(a.id);
+    var shortcut = a.shortcut || '';
 
     var item = document.createElement('div');
     item.className = 'agent-item' + (isSelected ? ' selected' : '');
     item.dataset.agentId = a.id;
 
     var typeLabel = a.type === 'electron' ? 'Desktop' : 'Web';
+    var shortcutLabel = shortcut ? shortcut.replace('Control', 'Ctrl') : '未设置';
 
     item.innerHTML =
-      '<div class="agent-item-radio">' + (isSelected ? '&#9679;' : '&#9675;') + '</div>' +
+      '<div class="agent-item-checkbox">' +
+      '  <input type="checkbox" class="agent-checkbox" data-agent-id="' + a.id + '" ' +
+      (isSelected ? 'checked' : '') + ' />' +
+      '</div>' +
       '<div class="agent-item-info">' +
       '  <div class="agent-item-header">' +
       '    <div class="agent-item-name">' + escapeHtml(a.name) + '</div>' +
@@ -447,19 +400,36 @@ function renderAgents() {
       '      value="' + escapeHtml(a.installPath || '') + '" ' +
       '      placeholder="Leave empty for auto-detect" />' +
       '  </div>' +
+      '  <div class="agent-shortcut-row">' +
+      '    <label class="shortcut-label">Shortcut:</label>' +
+      '    <div class="shortcut-input-wrapper">' +
+      '      <span class="shortcut-display" id="shortcut-display-' + a.id + '">' + escapeHtml(shortcutLabel) + '</span>' +
+      '    </div>' +
+      '    <button class="btn btn-xs btn-secondary record-btn" data-agent-id="' + a.id + '">' +
+      (shortcut ? '修改' : '录制') +
+      '    </button>' +
+      '  </div>' +
       '</div>' +
       '<div class="agent-item-actions">' +
       '  <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">Test</button>' +
       '</div>';
 
-    // Click to select agent
-    item.addEventListener('click', (function(agentId) {
-      return async function() {
-        await selectAgent(agentId);
+    agentsList.appendChild(item);
+
+    // Checkbox toggle
+    var checkbox = item.querySelector('.agent-checkbox');
+    checkbox.addEventListener('change', (function(agentId) {
+      return async function(e) {
+        e.stopPropagation();
+        await toggleAgent(agentId);
       };
     })(a.id));
 
-    agentsList.appendChild(item);
+    // Click on the card itself also toggles (via the checkbox)
+    var checkboxDiv = item.querySelector('.agent-item-checkbox');
+    checkboxDiv.addEventListener('click', function(e) {
+      e.stopPropagation();
+    });
 
     // Auto-save install path on change/blur
     (function(agentId, input) {
@@ -494,34 +464,45 @@ function renderAgents() {
     // Prevent click on input rows from triggering agent selection
     item.querySelector('.agent-endpoint-row').addEventListener('click', function(e) { e.stopPropagation(); });
     item.querySelector('.agent-install-path').addEventListener('click', function(e) { e.stopPropagation(); });
+    item.querySelector('.agent-shortcut-row').addEventListener('click', function(e) { e.stopPropagation(); });
+  }
+
+  // Attach record button handlers
+  var recordBtns = agentsList.querySelectorAll('.record-btn');
+  for (var j = 0; j < recordBtns.length; j++) {
+    (function(btn) {
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        var agentId = btn.dataset.agentId;
+        showShortcutRecorder(agentId);
+      });
+    })(recordBtns[j]);
   }
 
   // Attach test button handlers
   var testBtns = agentsList.querySelectorAll('.test-btn');
-  for (var j = 0; j < testBtns.length; j++) {
+  for (var k = 0; k < testBtns.length; k++) {
     (function(btn) {
       btn.addEventListener('click', async function(e) {
         e.stopPropagation();
         var agentId = btn.dataset.agentId;
         await testAgentConnection(agentId);
       });
-    })(testBtns[j]);
+    })(testBtns[k]);
   }
 }
 
-async function selectAgent(id) {
+async function toggleAgent(id) {
   try {
-    var result = await window.electronAPI.selectAgent(id);
-    if (result.success) {
-      selectedAgentId = id;
-      renderAgents();
-      var found = agents.find(function(a) { return a.id === id; });
-      addLog('Selected agent: ' + (found ? found.name : id), 'info');
-    } else {
-      addLog('Failed to select agent: ' + id, 'error');
-    }
+    var result = await window.electronAPI.toggleAgent(id);
+    // Refresh selectedAgentIds from agents list
+    selectedAgentIds = agents.filter(function(a) { return a.id === id ? result.selected : a.selected; }).map(function(a) { return a.id; });
+    // Simpler approach: just reload agents
+    await loadAgents();
+    var found = agents.find(function(a) { return a.id === id; });
+    addLog((result.selected ? 'Enabled' : 'Disabled') + ' agent: ' + (found ? found.name : id), 'info');
   } catch (error) {
-    addLog('Error selecting agent: ' + error.message, 'error');
+    addLog('Error toggling agent: ' + error.message, 'error');
   }
 }
 
@@ -556,6 +537,162 @@ async function testAgentConnection(id) {
     }
     addLog('Error testing agent connection: ' + error.message, 'error');
   }
+}
+
+// ===== Shortcut Recorder =====
+
+var recorderKeyHandler = null;
+
+function parseKeyEvent(e) {
+  var parts = [];
+  if (e.ctrlKey) parts.push('Control');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.altKey) parts.push('Alt');
+  if (e.metaKey) parts.push('Meta');
+
+  // Exclude standalone modifier keys
+  var key = e.key;
+  var code = e.code;
+  var modifierKeys = ['Control', 'Shift', 'Alt', 'Meta'];
+  if (modifierKeys.includes(key)) {
+    // Only modifier keys pressed, not a complete shortcut
+    return '';
+  }
+
+  var keyMap = {
+    ' ': 'Space',
+    'ArrowUp': 'Up',
+    'ArrowDown': 'Down',
+    'ArrowLeft': 'Left',
+    'ArrowRight': 'Right',
+    'Escape': 'Escape',
+    'Enter': 'Enter',
+    'Tab': 'Tab',
+    'Delete': 'Delete',
+    'Backspace': 'Backspace',
+    'Insert': 'Insert',
+    'Home': 'Home',
+    'End': 'End',
+    'PageUp': 'PageUp',
+    'PageDown': 'PageDown',
+  };
+
+  if (keyMap[key]) {
+    parts.push(keyMap[key]);
+  } else if (key.length === 1) {
+    // Single character keys (letters, numbers, punctuation)
+    parts.push(key.toUpperCase());
+  } else if (code) {
+    // Fallback to e.code for keys where e.key might be unreliable
+    if (code.startsWith('Digit')) {
+      parts.push(code.replace('Digit', ''));
+    } else if (code.startsWith('Key')) {
+      parts.push(code.replace('Key', ''));
+    } else {
+      parts.push(code);
+    }
+  }
+
+  return parts.join('+');
+}
+
+function showShortcutRecorder(agentId) {
+  recorderAgentId = agentId;
+  recorderShortcut = null;
+
+  var overlay = document.getElementById('shortcutRecorderOverlay');
+  var display = document.getElementById('recorderDisplay');
+  var status = document.getElementById('recorderStatus');
+  var confirmBtn = document.getElementById('recorderConfirm');
+
+  display.textContent = '—';
+  status.textContent = '';
+  status.className = 'recorder-status';
+  confirmBtn.disabled = true;
+  overlay.style.display = 'flex';
+
+  // Suspend all global shortcuts so they don't intercept the recording
+  window.electronAPI.suspendShortcuts();
+
+  // Listen for keydown events
+  recorderKeyHandler = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    var shortcut = parseKeyEvent(e);
+
+    // Show modifier-only feedback so user knows keys are being detected
+    var modifierKeys = ['Control', 'Shift', 'Alt', 'Meta'];
+    if (!shortcut && modifierKeys.includes(e.key)) {
+      var modParts = [];
+      if (e.ctrlKey) modParts.push('Ctrl');
+      if (e.shiftKey) modParts.push('Shift');
+      if (e.altKey) modParts.push('Alt');
+      if (e.metaKey) modParts.push('Cmd');
+      display.textContent = modParts.join('+');
+      status.textContent = '继续按下其他键...';
+      status.className = 'recorder-status hint';
+      return;
+    }
+
+    if (!shortcut) return;
+
+    recorderShortcut = shortcut;
+    display.textContent = shortcut.replace('Control', 'Ctrl');
+
+    // Check system conflict
+    window.electronAPI.checkShortcut(shortcut).then(function(result) {
+      if (result.available) {
+        status.textContent = '';
+        status.className = 'recorder-status';
+      } else {
+        status.textContent = '⚠ 该快捷键可能被其他软件占用';
+        status.className = 'recorder-status warning';
+      }
+      confirmBtn.disabled = false;
+    });
+  };
+
+  document.addEventListener('keydown', recorderKeyHandler);
+}
+
+function hideShortcutRecorder() {
+  if (recorderKeyHandler) {
+    document.removeEventListener('keydown', recorderKeyHandler);
+    recorderKeyHandler = null;
+  }
+  recorderAgentId = null;
+  recorderShortcut = null;
+  document.getElementById('shortcutRecorderOverlay').style.display = 'none';
+  // Resume global shortcuts that were suspended during recording
+  window.electronAPI.resumeShortcuts();
+}
+
+async function confirmShortcut() {
+  if (!recorderAgentId || !recorderShortcut) return;
+
+  var confirmBtn = document.getElementById('recorderConfirm');
+  var status = document.getElementById('recorderStatus');
+  confirmBtn.disabled = true;
+  status.textContent = '保存中...';
+  status.className = 'recorder-status';
+
+  var result = await window.electronAPI.updateAgentConfig(recorderAgentId, { shortcut: recorderShortcut });
+
+  if (result.success) {
+    addLog('Shortcut saved for ' + recorderAgentId + ': ' + recorderShortcut, 'success');
+    hideShortcutRecorder();
+    // Reload agents to update display
+    await loadAgents();
+  } else if (result.error) {
+    status.textContent = '✗ ' + result.error;
+    status.className = 'recorder-status error';
+    confirmBtn.disabled = false;
+  }
+}
+
+function cancelShortcut() {
+  hideShortcutRecorder();
 }
 
 // Start

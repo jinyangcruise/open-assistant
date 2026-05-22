@@ -14,20 +14,18 @@
     </header>
 
     <main>
-      <!-- Status Section -->
-      <section class="status-section">
-        <div class="status-card">
-          <div class="status-indicator" id="statusIndicator">
-            <span class="status-dot"></span>
-            <span class="status-text">Ready</span>
+      <!-- Usage Section -->
+      <section class="usage-section">
+        <div class="usage-card">
+          <div class="usage-content">
+            <h2>使用说明</h2>
+            <ol>
+              <li>在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent</li>
+              <li>为每个 Agent 点击 <strong>录制按钮</strong> 设置快捷键</li>
+              <li>在任何应用中按下 Agent 的快捷键即可触发 AI 分析</li>
+            </ol>
+            <p class="usage-note">提示：快捷键无需打开本窗口即可生效。</p>
           </div>
-          <button id="triggerBtn" class="btn btn-primary">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
-            Trigger Assistant
-          </button>
-          <p class="shortcut-hint">Press <kbd id="shortcutDisplay">Ctrl+Space</kbd> anywhere</p>
         </div>
       </section>
 
@@ -36,11 +34,6 @@
         <h2>⚙️ Configuration</h2>
         
         <form id="configForm">
-          <div class="form-group">
-            <label for="shortcut">Global Shortcut</label>
-            <input type="text" id="shortcut" name="shortcut" placeholder="Control+Space">
-            <span class="help-text">Use + to separate modifiers (e.g., Control+Shift+Space)</span>
-          </div>
 
           <div class="form-group">
             <label for="timeout">Timeout (seconds)</label>
@@ -133,7 +126,7 @@
       <section class="agents-section">
         <h2>AI Agent</h2>
         <div class="agents-info">
-          <span class="help-text">Select which AI agent to use for screen analysis</span>
+          <span class="help-text">Configure each agent's shortcut key. Press the shortcut to trigger that agent's service.</span>
         </div>
         <div id="agentsList" class="agents-list">
           <!-- Rendered by renderer.js -->
@@ -160,6 +153,20 @@
     <footer>
       <p>Built with ❤️ using OpenCLI | <a href="https://github.com/jackwener/opencli" target="_blank">GitHub</a></p>
     </footer>
+  </div>
+
+  <!-- Shortcut Recorder Modal -->
+  <div id="shortcutRecorderOverlay" class="recorder-overlay" style="display:none">
+    <div class="recorder-modal">
+      <h3>设置快捷键</h3>
+      <p class="recorder-hint">请按下你的快捷键组合...</p>
+      <div class="recorder-display" id="recorderDisplay">—</div>
+      <div class="recorder-status" id="recorderStatus"></div>
+      <div class="recorder-actions">
+        <button id="recorderConfirm" class="btn btn-primary" disabled>确认</button>
+        <button id="recorderCancel" class="btn btn-secondary">取消</button>
+      </div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

@@ -9,9 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   updateConfig: (updates) => ipcRenderer.invoke('update-config', updates),
   
-  // Assistant control
-  triggerAssistant: () => ipcRenderer.invoke('trigger-assistant'),
-  
   // Logs
   getLogs: () => ipcRenderer.invoke('get-logs'),
   
@@ -23,9 +20,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Agent management
   getAgents: () => ipcRenderer.invoke('get-agents'),
-  selectAgent: (id) => ipcRenderer.invoke('select-agent', id),
+  toggleAgent: (id) => ipcRenderer.invoke('toggle-agent', id),
   testAgentConnection: (id) => ipcRenderer.invoke('test-agent-connection', id),
   updateAgentConfig: (agentId, updates) => ipcRenderer.invoke('update-agent-config', agentId, updates),
+  checkShortcut: (shortcut) => ipcRenderer.invoke('check-shortcut', shortcut),
+  suspendShortcuts: () => ipcRenderer.invoke('suspend-shortcuts'),
+  resumeShortcuts: () => ipcRenderer.invoke('resume-shortcuts'),
   
   // Event listeners
   onAnalysisResult: (callback) => {
