@@ -40,6 +40,8 @@ for (const [id, config] of Object.entries(persistedAgents)) {
 
 let mainWindow;
 let overlayWindow;
+/** Drag state for the overlay window (tracked in main process to avoid async IPC race) */
+let overlayDragState = null;
 let tray;
 let isProcessing = false;
 let currentAbortController = null;
@@ -131,6 +133,9 @@ function showOverlay(x, y) {
 
   overlayWindow.setPosition(Math.round(winX), Math.round(winY));
   overlayWindow.showInactive(); // Show without stealing focus
+  // Disable forwarding immediately so the bar is interactive on appearance.
+  // mouseleave on the bar will re-enable forwarding when the user moves away.
+  overlayWindow.setIgnoreMouseEvents(false);
 }
 
 // Hide the overlay status bar
@@ -691,6 +696,29 @@ function setupIpcHandlers() {
         overlayWindow.setIgnoreMouseEvents(false);
       }
     }
+  });
+
+  // Overlay window drag — mousedown: record base position + mouse origin
+  ipcMain.on('overlay-drag-start', (event, mouseX, mouseY) => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return;
+    const [winX, winY] = overlayWindow.getPosition();
+    overlayDragState = { baseWinX: winX, baseWinY: winY, baseMouseX: mouseX, baseMouseY: mouseY };
+  });
+
+  // Overlay window drag — mousemove: compute delta from origin and reposition
+  ipcMain.on('overlay-drag-move', (event, mouseX, mouseY) => {
+    if (!overlayWindow || overlayWindow.isDestroyed() || !overlayDragState) return;
+    const dx = mouseX - overlayDragState.baseMouseX;
+    const dy = mouseY - overlayDragState.baseMouseY;
+    overlayWindow.setPosition(
+      Math.round(overlayDragState.baseWinX + dx),
+      Math.round(overlayDragState.baseWinY + dy),
+    );
+  });
+
+  // Overlay window drag — mouseup: clear state
+  ipcMain.on('overlay-drag-end', () => {
+    overlayDragState = null;
   });
 }
 

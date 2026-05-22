@@ -11,4 +11,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   /** Enable or disable mouse event forwarding on the overlay window */
   setIgnoreMouseEvents: (ignore) => ipcRenderer.send('set-ignore-mouse-events', ignore),
+
+  /** Start window drag — records base position + mouse origin in main process */
+  startDrag: (mouseX, mouseY) => ipcRenderer.send('overlay-drag-start', mouseX, mouseY),
+
+  /** Continue window drag — main process computes delta and repositions */
+  dragMove: (mouseX, mouseY) => ipcRenderer.send('overlay-drag-move', mouseX, mouseY),
+
+  /** End window drag — clears drag state in main process */
+  endDrag: () => ipcRenderer.send('overlay-drag-end'),
 });
