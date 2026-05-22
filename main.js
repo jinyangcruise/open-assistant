@@ -168,42 +168,9 @@ function createTray() {
     }
     
     tray = new Tray(trayIcon);
-
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: 'Open Settings',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.show();
-          } else {
-            createMainWindow();
-          }
-        }
-      },
-      {
-        label: 'Trigger Assistant',
-        accelerator: store.get('shortcut'),
-        click: () => handleShortcut()
-      },
-      { type: 'separator' },
-      {
-        label: 'Auto Insert: ON',
-        type: 'checkbox',
-        checked: store.get('auto_insert'),
-        click: (item) => {
-          store.set('auto_insert', item.checked);
-          item.label = `Auto Insert: ${item.checked ? 'ON' : 'OFF'}`;
-        }
-      },
-      { type: 'separator' },
-      {
-        label: 'Quit',
-        click: () => app.quit()
-      }
-    ]);
+    rebuildTrayMenu();
 
     tray.setToolTip('OpenCLI Smart Assistant');
-    tray.setContextMenu(contextMenu);
 
     tray.on('click', () => {
       if (mainWindow) {
@@ -218,6 +185,67 @@ function createTray() {
     console.error('Failed to create tray (continuing anyway):', error.message);
     // Continue without tray
     tray = null;
+  }
+}
+
+// Build or rebuild the tray context menu from current config
+function rebuildTrayMenu() {
+  if (!tray) return;
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Settings',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+        } else {
+          createMainWindow();
+        }
+      }
+    },
+    {
+      label: 'Trigger Assistant',
+      accelerator: store.get('shortcut'),
+      click: () => handleShortcut()
+    },
+    { type: 'separator' },
+    {
+      label: 'Output',
+      submenu: [
+        {
+          label: 'Auto Insert',
+          type: 'radio',
+          checked: store.get('auto_insert') !== false,
+          click: () => {
+            store.set('auto_insert', true);
+            notifyConfigUpdated();
+          }
+        },
+        {
+          label: 'Clipboard',
+          type: 'radio',
+          checked: store.get('auto_insert') === false,
+          click: () => {
+            store.set('auto_insert', false);
+            notifyConfigUpdated();
+          }
+        }
+      ]
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => app.quit()
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+}
+
+// Notify the settings window that config has been updated
+function notifyConfigUpdated() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('config-updated', store.store);
   }
 }
 
@@ -428,6 +456,9 @@ function setupIpcHandlers() {
     if (updates.shortcut) {
       registerShortcut();
     }
+    
+    // Rebuild tray menu to reflect config changes (e.g. Output mode)
+    rebuildTrayMenu();
     
     return store.store;
   });

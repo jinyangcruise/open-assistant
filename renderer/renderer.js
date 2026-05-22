@@ -47,6 +47,11 @@ async function init() {
   // Setup IPC listeners
   window.electronAPI.onAnalysisResult(handleAnalysisResult);
   window.electronAPI.onError(handleError);
+  window.electronAPI.onConfigUpdated((newConfig) => {
+    config = newConfig;
+    populateForm(config);
+    addLog('Configuration updated from tray', 'info');
+  });
   
   // Load prompt management
   await loadPrompts();
@@ -119,7 +124,9 @@ async function saveConfig() {
   const updates = {};
   
   for (const [key, value] of formData.entries()) {
-    if (key === 'auto_insert' || key === 'show_notifications') {
+    if (key === 'auto_insert') {
+      updates[key] = value === 'true';
+    } else if (key === 'show_notifications') {
       updates[key] = formData.get(key) === 'on';
     } else if (key === 'timeout_seconds') {
       updates[key] = parseInt(value, 10);
@@ -143,7 +150,7 @@ function populateForm(config) {
   document.getElementById('shortcut').value = config.shortcut || 'Control+Space';
   document.getElementById('cdpEndpoint').value = config.doubao_cdp_endpoint || 'http://127.0.0.1:9225';
   document.getElementById('timeout').value = config.timeout_seconds || 30;
-  document.getElementById('autoInsert').checked = config.auto_insert !== false;
+  document.getElementById('autoInsert').value = config.auto_insert !== false ? 'true' : 'false';
   document.getElementById('showNotifications').checked = config.show_notifications !== false;
   document.getElementById('logLevel').value = config.log_level || 'info';
   document.getElementById('responseMode').value = config.response_mode || 'sse-fetch';
