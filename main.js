@@ -131,11 +131,15 @@ function showOverlay(x, y) {
   if (winX < workArea.x) winX = workArea.x + 4;
   if (winY < workArea.y) winY = workArea.y + 4;
 
-  overlayWindow.setPosition(Math.round(winX), Math.round(winY));
+  overlayWindow.setBounds({
+    x: Math.round(winX), y: Math.round(winY),
+    width: winWidth, height: winHeight,
+  });
   overlayWindow.showInactive(); // Show without stealing focus
   // Disable forwarding immediately so the bar is interactive on appearance.
   // mouseleave on the bar will re-enable forwarding when the user moves away.
   overlayWindow.setIgnoreMouseEvents(false);
+
 }
 
 // Hide the overlay status bar
@@ -561,6 +565,31 @@ function updateTrayStatus(status) {
 
 // IPC handlers
 function setupIpcHandlers() {
+  // Dev-mode debug logging for overlay drag
+  const isDragDebug = process.argv.includes('--dev');
+  function dragLog(...args) {
+    if (isDragDebug) console.log('[Drag]', ...args);
+  }
+
+  // Forward renderer-side debug logs (from overlay.js) to terminal
+  ipcMain.on('overlay-debug-log', (event, ...args) => {
+    if (isDragDebug) console.log('[Overlay]', ...args);
+  });
+
+  // Log renderer position + main process position for debugging
+  ipcMain.on('overlay-debug-pos', (event, screenX, screenY, innerW, innerH) => {
+    if (!isDragDebug) return;
+    let mx = -1, my = -1;
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      const p = overlayWindow.getPosition();
+      mx = p[0]; my = p[1];
+    }
+    console.log('[DebugPos] R:(%d,%d) %d×%d  |  M:(%d,%d)  diff=(%d,%d)',
+      screenX, screenY, innerW, innerH,
+      mx, my,
+      screenX - mx, screenY - my
+    );
+  });
   // Get config
   ipcMain.handle('get-config', () => {
     return store.store;
@@ -698,27 +727,48 @@ function setupIpcHandlers() {
     }
   });
 
-  // Overlay window drag — mousedown: record base position + mouse origin
-  ipcMain.on('overlay-drag-start', (event, mouseX, mouseY) => {
+  // Overlay window drag — mousedown: record base position
+  ipcMain.on('overlay-drag-start', (event, mouseX, mouseY, winScreenX, winScreenY) => {
     if (!overlayWindow || overlayWindow.isDestroyed()) return;
-    const [winX, winY] = overlayWindow.getPosition();
-    overlayDragState = { baseWinX: winX, baseWinY: winY, baseMouseX: mouseX, baseMouseY: mouseY };
+    // Use renderer-provided window position (from window.screenX/Y in DOM)
+    // as the starting position. Subsequent drag-move adds movement deltas.
+    overlayDragState = { currentWinX: winScreenX, currentWinY: winScreenY };
+    dragLog('start  winScreen=(%d,%d)', winScreenX, winScreenY);
   });
 
-  // Overlay window drag — mousemove: compute delta from origin and reposition
-  ipcMain.on('overlay-drag-move', (event, mouseX, mouseY) => {
+  // Overlay window drag — mousemove: apply movement delta to current position
+  // Uses e.movementX/Y from the renderer (cumulative delta from last mousemove)
+  // instead of absolute screen coords, so synthetic events (movementX=0) from
+  // SSE / focus-changes don't snap the window back to the drag origin.
+  // Uses setBounds to atomically set position AND size — prevents DWM from
+  // independently resizing transparent layered windows during repeated calls.
+  ipcMain.on('overlay-drag-move', (event, deltaX, deltaY) => {
     if (!overlayWindow || overlayWindow.isDestroyed() || !overlayDragState) return;
-    const dx = mouseX - overlayDragState.baseMouseX;
-    const dy = mouseY - overlayDragState.baseMouseY;
-    overlayWindow.setPosition(
-      Math.round(overlayDragState.baseWinX + dx),
-      Math.round(overlayDragState.baseWinY + dy),
-    );
+    const newX = overlayDragState.currentWinX + deltaX;
+    const newY = overlayDragState.currentWinY + deltaY;
+    overlayWindow.setBounds({
+      x: Math.round(newX), y: Math.round(newY),
+      width: 280, height: 84,
+    });
+    overlayDragState.currentWinX = newX;
+    overlayDragState.currentWinY = newY;
+    dragLog('move   delta=(%d,%d)  curPos=(%d,%d)', deltaX, deltaY, newX, newY);
   });
 
-  // Overlay window drag — mouseup: clear state
+  // Overlay window drag — mouseup: clear state and reset size
   ipcMain.on('overlay-drag-end', () => {
     overlayDragState = null;
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      const [x, y] = overlayWindow.getPosition();
+      overlayWindow.setBounds({ x, y, width: 280, height: 84 });
+    }
+  });
+
+  // Overlay window position query (for debug display)
+  ipcMain.handle('overlay-get-position', () => {
+    if (!overlayWindow || overlayWindow.isDestroyed()) return { x: -1, y: -1 };
+    const [x, y] = overlayWindow.getPosition();
+    return { x, y };
   });
 }
 
