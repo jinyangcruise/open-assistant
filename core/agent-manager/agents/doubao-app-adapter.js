@@ -830,6 +830,48 @@ return response;
       this._cleanupTempFile(tmpFile);
     }
   }
+
+  /**
+   * Stop Doubao's AI generation by clicking the stop/cancel button.
+   *
+   * During generation, Doubao shows a stop button inside:
+   *   div#flow-end-msg-send.send-btn-wrapper.group.\!hidden > button
+   *
+   * This method uses the existing CDP connection to click that button,
+   * telling Doubao to stop generating (not just silencing the adapter).
+   *
+   * @returns {Promise<boolean>} true if the stop button was found and clicked
+   */
+  async stopGeneration() {
+    if (!this._page) {
+      debugLog('stopGeneration: no CDP page connection available');
+      return false;
+    }
+    try {
+      const result = await this._page.evaluate(`(function() {
+        const container = document.getElementById('flow-end-msg-send');
+        if (!container) return { ok: false };
+        if (!container.classList.contains('send-btn-wrapper') ||
+            !container.classList.contains('group') ||
+            !container.classList.contains('!hidden')) {
+          return { ok: false };
+        }
+        const btn = container.querySelector('button');
+        if (!btn) return { ok: false };
+        btn.click();
+        return { ok: true };
+      })()`);
+      if (result && result.ok) {
+        debugLog('stopGeneration: stop button clicked');
+        return true;
+      }
+      debugLog('stopGeneration: conditions not met, stop button not found');
+      return false;
+    } catch (e) {
+      debugLog('stopGeneration failed:', e.message);
+      return false;
+    }
+  }
 }
 
 module.exports = DoubaoAppAdapter;

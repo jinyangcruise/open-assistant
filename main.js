@@ -45,6 +45,8 @@ let overlayDragState = null;
 let tray;
 let isProcessing = false;
 let currentAbortController = null;
+/** Current AI agent adapter instance (used to stop Doubao generation on cancel) */
+let currentAdapter = null;
 
 // Create main settings window
 function createMainWindow() {
@@ -431,6 +433,7 @@ async function handleShortcut() {
 
     // 4. Analyze with selected AI Agent (with optional streaming)
     const agent = AgentRegistry.getSelected();
+    currentAdapter = agent;
     console.log('Analyzing with agent:', agent ? agent.id : 'none');
 
     if (!agent) {
@@ -540,6 +543,7 @@ async function handleShortcut() {
   } finally {
     hideOverlay();
     currentAbortController = null;
+    currentAdapter = null;
     isProcessing = false;
     updateTrayStatus('Ready');
   }
@@ -692,7 +696,17 @@ function setupIpcHandlers() {
   // --- Overlay Window IPC (floating status bar) ---
 
   // Cancel current processing from the overlay's cancel button
-  ipcMain.on('cancel-processing', () => {
+  // Also tells Doubao to stop generating via CDP (if adapter supports it)
+  ipcMain.on('cancel-processing', async () => {
+    // 1. Stop Doubao AI generation (click the stop button via CDP)
+    if (currentAdapter && typeof currentAdapter.stopGeneration === 'function') {
+      try {
+        await currentAdapter.stopGeneration();
+      } catch (e) {
+        console.log('[Main] Failed to stop Doubao generation:', e.message);
+      }
+    }
+    // 2. Abort current processing
     const controller = currentAbortController;
     if (controller && !controller.signal.aborted) {
       console.log('[Main] User cancelled processing via overlay');
