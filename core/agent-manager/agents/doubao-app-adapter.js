@@ -164,8 +164,11 @@ class DoubaoAppAdapter extends BaseAgent {
 
     debugLog('_findOrVerifyChatPage: scanning', candidates.length, 'candidates');
 
-    // 3. Probe each candidate: connect briefly and check for chat input
+    // 3. Probe each candidate: find chat pages, prefer the focused one
     const { CDPBridge } = await this._getOpencliCdp();
+    let firstMatch = null;     // page of the first chat page (fallback)
+    let firstBridge = null;    // bridge of the first chat page (fallback)
+
     for (const t of candidates) {
       let bridge = null;
       try {
@@ -174,22 +177,50 @@ class DoubaoAppAdapter extends BaseAgent {
         const hasInput = await page.evaluate(
           `document.querySelector('${SEL.INPUT}') !== null`,
         );
-        if (hasInput) {
-          debugLog('_findOrVerifyChatPage: found chat page —', t.url);
-          // Keep this connection
+        if (!hasInput) {
+          try { bridge.close(); } catch (_) { /* ignore */ }
+          continue;
+        }
+
+        // Found a chat page — check if it has focus (currently active conversation)
+        const hasFocus = await page.evaluate('document.hasFocus()');
+        debugLog('_findOrVerifyChatPage: found chat page —', t.url, 'focused:', hasFocus);
+
+        if (hasFocus) {
+          // Active conversation found — close fallback connection if different
+          if (firstBridge && firstBridge !== bridge) {
+            try { firstBridge.close(); } catch (_) { /* ignore */ }
+          }
           this._bridge = bridge;
           this._page = page;
+          debugLog('_findOrVerifyChatPage: using focused chat page');
           return page;
+        }
+
+        // Save first non-focused match as fallback
+        if (!firstMatch) {
+          firstMatch = page;
+          firstBridge = bridge;
+        } else {
+          try { bridge.close(); } catch (_) { /* ignore */ }
         }
       } catch (e) {
         debugLog('_findOrVerifyChatPage: probe failed for', t.url, '—', e.message);
-      }
-      if (bridge) {
-        try { bridge.close(); } catch (_) { /* ignore */ }
+        if (bridge) {
+          try { bridge.close(); } catch (_) { /* ignore */ }
+        }
       }
     }
 
-    // 4. None matched
+    // 4. No focused page found — use the first chat page as fallback
+    if (firstMatch) {
+      this._bridge = firstBridge;
+      this._page = firstMatch;
+      debugLog('_findOrVerifyChatPage: no focused page found, using first match');
+      return firstMatch;
+    }
+
+    // 5. None matched
     throw new Error(
       '无法找到豆包聊天页面。请确保豆包桌面端已打开且处于聊天页面。' +
       `（共检查 ${candidates.length} 个目标，均未包含聊天输入框）`
@@ -203,6 +234,33 @@ class DoubaoAppAdapter extends BaseAgent {
    * @returns {Promise<{success: boolean}>}
    */
   async _uploadScreenshot(page, filePath) {
+    // Step 1: Ensure the file input element is rendered in the DOM.
+    // After restart, the chat input area's lazy components (including the
+    // file input) may not be initialized until the user interacts with the
+    // page. We focus the chat input to trigger lazy rendering.
+    try {
+      const hasFileInput = await page.evaluate(
+        `document.querySelector('${FILE_INPUT}') !== null`,
+      );
+      if (!hasFileInput) {
+        debugLog('_uploadScreenshot: file input not found, triggering chat area...');
+        await page.evaluate(`(function() {
+          const input = document.querySelector('${SEL.INPUT}');
+          if (input) {
+            input.focus();
+            input.dispatchEvent(new Event('focus', { bubbles: true }));
+            input.dispatchEvent(new Event('click', { bubbles: true }));
+          }
+          return !!input;
+        })()`);
+        // Wait for lazy components to render
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } catch (e) {
+      debugLog('_uploadScreenshot: pre-check failed:', e.message);
+    }
+
+    // Step 2: Upload file via CDP DOM API
     try {
       const docResult = await page.cdp('DOM.getDocument');
       const queryResult = await page.cdp('DOM.querySelector', {
@@ -214,10 +272,12 @@ class DoubaoAppAdapter extends BaseAgent {
           files: [filePath],
           nodeId: queryResult.nodeId,
         });
+        debugLog('_uploadScreenshot: success');
         return { success: true };
       }
+      debugLog('_uploadScreenshot: file input node not found in DOM');
     } catch (err) {
-      // File input not found or CDP command failed
+      debugLog('_uploadScreenshot: CDP upload failed:', err.message);
     }
     return { success: false };
   }
@@ -746,9 +806,10 @@ return response;
       // 6. Wake up hidden renderer (best-effort; OK to fail for SSE Fetch)
       try {
         await page.cdp('Page.bringToFront');
+        debugLog('bringToFront (early) succeeded');
         await sleep(0.5);
       } catch (e) {
-        // Page might be hidden — this is OK, especially for SSE Fetch
+        debugLog('bringToFront (early) failed:', e.message);
       }
 
       // 7. Capture the last assistant message text BEFORE sending (needed by DOM poll)
@@ -796,6 +857,14 @@ return response;
 
         const ssePromise = this._captureSSEResponse(bridge, userTimeout, onChunk, signal);
 
+        // Ensure page is active before clicking send (window may be minimized/hidden)
+        try {
+          await page.cdp('Page.bringToFront');
+          await sleep(0.3);
+        } catch (e) {
+          debugLog('bringToFront before send failed:', e.message);
+        }
+
         // Click send (trigger the request that SSE capture is waiting for)
         const clicked = await page.evaluate(clickSendScript());
         if (!clicked) {
@@ -806,6 +875,14 @@ return response;
 
       } else {
         // === DOM POLL MODE ===
+        // Ensure page is active before clicking send
+        try {
+          await page.cdp('Page.bringToFront');
+          await sleep(0.3);
+        } catch (e) {
+          debugLog('bringToFront before send failed:', e.message);
+        }
+
         const clicked = await page.evaluate(clickSendScript());
         if (!clicked) {
           await page.pressKey('Enter');
