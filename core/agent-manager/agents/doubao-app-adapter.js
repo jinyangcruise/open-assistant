@@ -237,13 +237,16 @@ class DoubaoAppAdapter extends BaseAgent {
     // Step 1: Ensure the file input element is rendered in the DOM.
     // After restart, the chat input area's lazy components (including the
     // file input) may not be initialized until the user interacts with the
-    // page. We focus the chat input to trigger lazy rendering.
+    // page. We try progressively stronger triggers:
+    //   1a. JS-level focus + dispatchEvent (may not wake React lazy loading)
+    //   1b. CDP-level mouse click + keystroke (real hardware-level events)
     try {
       const hasFileInput = await page.evaluate(
         `document.querySelector('${FILE_INPUT}') !== null`,
       );
       if (!hasFileInput) {
         debugLog('_uploadScreenshot: file input not found, triggering chat area...');
+        // 1a. JS-level trigger
         await page.evaluate(`(function() {
           const input = document.querySelector('${SEL.INPUT}');
           if (input) {
@@ -253,8 +256,53 @@ class DoubaoAppAdapter extends BaseAgent {
           }
           return !!input;
         })()`);
-        // Wait for lazy components to render
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 500));
+
+        // 1b. If still missing, use CDP Input commands for real mouse+keyboard
+        const stillMissing = await page.evaluate(
+          `document.querySelector('${FILE_INPUT}') === null`,
+        );
+        if (stillMissing) {
+          debugLog('_uploadScreenshot: JS trigger insufficient, trying CDP Input events...');
+          try {
+            // Get input element bounding box for CDP mouse click
+            const rect = await page.evaluate(`(function() {
+              var el = document.querySelector('${SEL.INPUT}');
+              if (!el) return null;
+              var r = el.getBoundingClientRect();
+              return { x: r.x, y: r.y, w: r.width, h: r.height };
+            })()`);
+            if (rect && rect.w > 0 && rect.h > 0) {
+              var cx = Math.round(rect.x + rect.w / 2);
+              var cy = Math.round(rect.y + rect.h / 2);
+              // Real mouse click at center of input
+              await page.cdp('Input.dispatchMouseEvent', {
+                type: 'mousePressed', x: cx, y: cy, button: 'left', clickCount: 1,
+              });
+              await page.cdp('Input.dispatchMouseEvent', {
+                type: 'mouseReleased', x: cx, y: cy, button: 'left', clickCount: 1,
+              });
+              await new Promise(r => setTimeout(r, 200));
+              // Type Space then Backspace to trigger React state change
+              await page.cdp('Input.dispatchKeyEvent', {
+                type: 'keyDown', windowsVirtualKeyCode: 32, key: ' ',
+              });
+              await page.cdp('Input.dispatchKeyEvent', {
+                type: 'keyUp', windowsVirtualKeyCode: 32, key: ' ',
+              });
+              await page.cdp('Input.dispatchKeyEvent', {
+                type: 'keyDown', windowsVirtualKeyCode: 8, key: 'Backspace',
+              });
+              await page.cdp('Input.dispatchKeyEvent', {
+                type: 'keyUp', windowsVirtualKeyCode: 8, key: 'Backspace',
+              });
+              // Wait for React lazy components to mount
+              await new Promise(r => setTimeout(r, 1500));
+            }
+          } catch (e2) {
+            debugLog('_uploadScreenshot: CDP Input trigger failed:', e2.message);
+          }
+        }
       }
     } catch (e) {
       debugLog('_uploadScreenshot: pre-check failed:', e.message);
@@ -788,29 +836,31 @@ return response;
       // 0. Find and connect to a verified Doubao chat page (positive DOM check)
       page = await this._findOrVerifyChatPage();
 
-      // 3. Save screenshot and upload
+      // 3. Wake up hidden/minimized renderer before any DOM interaction.
+      //    After restart, the page's lazy components (incl. file input) only
+      //    render when the page is active. Must bringToFront BEFORE upload.
+      try {
+        await page.cdp('Page.bringToFront');
+        debugLog('bringToFront (wake) succeeded');
+        await sleep(0.5);
+      } catch (e) {
+        debugLog('bringToFront (wake) failed:', e.message);
+      }
+
+      // 4. Save screenshot and upload
       tmpFile = this._saveTempScreenshot(screenshotBuffer);
       await this._uploadScreenshot(page, tmpFile);
 
-      // 4. Build the prompt
+      // 5. Build the prompt
       const hasScreenshot = true;
       const prompt =
         context.customPrompt && context.customPrompt.trim()
           ? context.customPrompt.trim()
           : buildAnalysisPrompt(context, hasScreenshot);
 
-      // 5. Use OpenCLI's utils for DOM interaction (injectText, clickSend)
+      // 6. Use OpenCLI's utils for DOM interaction (injectText, clickSend)
       const { injectTextScript, clickSendScript } =
         await _getOpencliUtils();
-
-      // 6. Wake up hidden renderer (best-effort; OK to fail for SSE Fetch)
-      try {
-        await page.cdp('Page.bringToFront');
-        debugLog('bringToFront (early) succeeded');
-        await sleep(0.5);
-      } catch (e) {
-        debugLog('bringToFront (early) failed:', e.message);
-      }
 
       // 7. Capture the last assistant message text BEFORE sending (needed by DOM poll)
       let beforeLastText = '';
