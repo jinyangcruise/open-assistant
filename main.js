@@ -75,8 +75,8 @@ function createMainWindow() {
 // Create floating overlay window (status bar)
 function createOverlayWindow() {
   overlayWindow = new BrowserWindow({
-    width: 240,
-    height: 44,
+    width: 280,
+    height: 84,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -110,20 +110,21 @@ function showOverlay(x, y) {
   // Clamp position to the display's work area
   const display = screen.getDisplayNearestPoint({ x, y });
   const workArea = display.workArea;
-  const barWidth = 240;
-  const barHeight = 44;
-  const offsetX = 15;
-  const offsetY = 20;
+  const winWidth = 280;
+  const winHeight = 84;
+  const pad = 20;
+  const offsetX = 15 - pad;  // bar visual position stays at x+15
+  const offsetY = 20 - pad;  // bar visual position stays at y+20
 
   let winX = x + offsetX;
   let winY = y + offsetY;
 
   // Prevent the bar from going off-screen
-  if (winX + barWidth > workArea.x + workArea.width) {
-    winX = workArea.x + workArea.width - barWidth - 8;
+  if (winX + winWidth > workArea.x + workArea.width) {
+    winX = workArea.x + workArea.width - winWidth - 8;
   }
-  if (winY + barHeight > workArea.y + workArea.height) {
-    winY = y - barHeight - 8;
+  if (winY + winHeight > workArea.y + workArea.height) {
+    winY = y - winHeight - 8;
   }
   if (winX < workArea.x) winX = workArea.x + 4;
   if (winY < workArea.y) winY = workArea.y + 4;
