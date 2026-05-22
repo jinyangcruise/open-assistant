@@ -4,18 +4,18 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   const cancelBtn = document.getElementById('cancelBtn');
+  const bar = document.querySelector('.overlay-bar');
 
-  // Notify main process when user hovers over/leaves the cancel button
-  // so it can enable/disable mouse event forwarding.
-  cancelBtn.addEventListener('mouseenter', () => {
+  // Hover over the bar → disable mouse forwarding so clicks register
+  bar.addEventListener('mouseenter', () => {
     window.electronAPI.setIgnoreMouseEvents(false);
   });
 
-  cancelBtn.addEventListener('mouseleave', () => {
+  bar.addEventListener('mouseleave', () => {
     window.electronAPI.setIgnoreMouseEvents(true);
   });
 
-  // Cancel button click → tell main process to abort
+  // Cancel button: click sends abort
   cancelBtn.addEventListener('click', () => {
     window.electronAPI.cancelProcessing();
   });
