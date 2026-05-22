@@ -8,7 +8,7 @@
  * - Core workflow: screenshot -> analyze -> insert
  */
 
-const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, clipboard, nativeImage } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, clipboard, nativeImage, screen } = require('electron');
 const path = require('path');
 const Store = require('electron-store');
 const { takeScreenshot } = require('./core/screenshot');
@@ -28,8 +28,10 @@ AgentRegistry.init(store);
 AgentRegistry.register(new DoubaoAppAdapter());
 
 let mainWindow;
+let overlayWindow;
 let tray;
 let isProcessing = false;
+let currentAbortController = null;
 
 // Create main settings window
 function createMainWindow() {
@@ -57,6 +59,73 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+// Create floating overlay window (status bar)
+function createOverlayWindow() {
+  overlayWindow = new BrowserWindow({
+    width: 240,
+    height: 44,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    focusable: false,
+    resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'overlay', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  overlayWindow.loadFile('overlay/index.html');
+  overlayWindow.setVisibleOnAllWorkspaces(true);
+
+  // Forward mouse events by default (click passes through to underneath windows)
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+}
+
+// Show the overlay status bar at the given screen coordinates
+function showOverlay(x, y) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+
+  // Clamp position to the display's work area
+  const display = screen.getDisplayNearestPoint({ x, y });
+  const workArea = display.workArea;
+  const barWidth = 240;
+  const barHeight = 44;
+  const offsetX = 15;
+  const offsetY = 20;
+
+  let winX = x + offsetX;
+  let winY = y + offsetY;
+
+  // Prevent the bar from going off-screen
+  if (winX + barWidth > workArea.x + workArea.width) {
+    winX = workArea.x + workArea.width - barWidth - 8;
+  }
+  if (winY + barHeight > workArea.y + workArea.height) {
+    winY = y - barHeight - 8;
+  }
+  if (winX < workArea.x) winX = workArea.x + 4;
+  if (winY < workArea.y) winY = workArea.y + 4;
+
+  overlayWindow.setPosition(Math.round(winX), Math.round(winY));
+  overlayWindow.showInactive(); // Show without stealing focus
+}
+
+// Hide the overlay status bar
+function hideOverlay() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.hide();
+  }
 }
 
 // Create system tray
@@ -230,6 +299,14 @@ async function handleShortcut() {
       responseMode: storedMode || 'sse-fetch',
     };
 
+    // Create AbortController for cancellation support
+    currentAbortController = new AbortController();
+    context.signal = currentAbortController.signal;
+
+    // Show overlay at mouse position
+    const cursorPos = screen.getCursorScreenPoint();
+    showOverlay(cursorPos.x, cursorPos.y);
+
     if (shouldAutoInsert) {
       if (outputMode === 'streaming') {
         // === STREAMING OUTPUT ===
@@ -253,8 +330,18 @@ async function handleShortcut() {
     const result = await agent.analyze(screenshotBuffer, context);
     console.log('Analysis result:', result);
 
+    // Check if user cancelled during analysis
+    const wasCancelled = currentAbortController?.signal.aborted;
+
     // 5. Output result
-    if (shouldAutoInsert) {
+    if (wasCancelled) {
+      console.log('Shortcut handler: analysis was cancelled by user, keeping partial paste');
+      showNotification('Cancelled', 'AI generation cancelled');
+      // Still need to finish streaming paster to restore clipboard
+      if (streamingPaster) {
+        await streamingPaster.finish();
+      }
+    } else if (shouldAutoInsert) {
       if (outputMode === 'streaming' && streamingPaster) {
         // Finish streaming paste
         await streamingPaster.finish();
@@ -283,18 +370,26 @@ async function handleShortcut() {
     }
 
   } catch (error) {
-    console.error('Error in shortcut handler:', error);
-    showNotification('Error', error.message || 'Failed to process request');
+    // Don't show error notification for user-initiated cancellations
+    if (error.name === 'AbortError' || (currentAbortController && currentAbortController.signal.aborted)) {
+      console.log('Shortcut handler: cancelled by user');
+      showNotification('Cancelled', 'AI generation cancelled');
+    } else {
+      console.error('Error in shortcut handler:', error);
+      showNotification('Error', error.message || 'Failed to process request');
+    }
 
     // Restore clipboard even on error
     if (streamingPaster) {
       try { await streamingPaster.finish(); } catch { /* ignore cleanup errors */ }
     }
 
-    if (mainWindow) {
+    if (mainWindow && !currentAbortController?.signal.aborted) {
       mainWindow.webContents.send('error', error.message);
     }
   } finally {
+    hideOverlay();
+    currentAbortController = null;
     isProcessing = false;
     updateTrayStatus('Ready');
   }
@@ -414,6 +509,30 @@ function setupIpcHandlers() {
   ipcMain.handle('test-agent-connection', async (event, id) => {
     return await AgentRegistry.testConnection(id);
   });
+
+  // --- Overlay Window IPC (floating status bar) ---
+
+  // Cancel current processing from the overlay's cancel button
+  ipcMain.on('cancel-processing', () => {
+    const controller = currentAbortController;
+    if (controller && !controller.signal.aborted) {
+      console.log('[Main] User cancelled processing via overlay');
+      controller.abort();
+    }
+  });
+
+  // Toggle mouse event forwarding on the overlay window
+  // When the user hovers over the cancel button, disable forwarding so clicks register.
+  // When they leave, re-enable forwarding so clicks pass through.
+  ipcMain.on('set-ignore-mouse-events', (event, ignore) => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      if (ignore) {
+        overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+      } else {
+        overlayWindow.setIgnoreMouseEvents(false);
+      }
+    }
+  });
 }
 
 // App lifecycle
@@ -425,6 +544,7 @@ app.whenReady().then(() => {
   
   // Then create UI
   createMainWindow();
+  createOverlayWindow();
   createTray();
   registerShortcut();
   
@@ -439,6 +559,11 @@ app.on('window-all-closed', (e) => {
 app.on('will-quit', () => {
   // Unregister all shortcuts
   globalShortcut.unregisterAll();
+  // Destroy overlay window if it exists
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.destroy();
+    overlayWindow = null;
+  }
   // Disconnect any active agent connections
   AgentRegistry.getAll().forEach(a => {
     const agent = AgentRegistry.getAgent(a.id);

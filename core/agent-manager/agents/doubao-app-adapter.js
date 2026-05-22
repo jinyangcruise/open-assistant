@@ -252,9 +252,10 @@ class DoubaoAppAdapter extends BaseAgent {
    * @param {string} beforeLastText - assistant text BEFORE sending
    * @param {number} timeout - max wait time in ms
    * @param {Function} [onChunk] - callback(text) called for each text increment
+   * @param {AbortSignal} [signal] - optional AbortSignal for cancellation
    * @returns {Promise<string>} Response text
    */
-  async _pollDomResponse(page, beforeLastText, timeout, onChunk) {
+  async _pollDomResponse(page, beforeLastText, timeout, onChunk, signal) {
     console.log('[DoubaoAdapter] _pollDomResponse: timeout=' + timeout + ' beforeLastTextLen=' + (beforeLastText || '').length);
     const POLL_MS = 200;
     const IDLE_TIMEOUT_MS = Math.min(1500, Math.floor(timeout / 3));
@@ -267,6 +268,12 @@ class DoubaoAppAdapter extends BaseAgent {
     let seenNewMessage = false;
 
     while (totalMs < timeout) {
+      // Check for cancellation
+      if (signal && signal.aborted) {
+        console.log('[DoubaoAdapter] DOM poll cancelled by signal, returning partial text');
+        return lastText || '';
+      }
+
       await sleep(POLL_MS / 1000);
       totalMs += POLL_MS;
 
@@ -484,9 +491,10 @@ class DoubaoAppAdapter extends BaseAgent {
    * @param {Object} bridge  - CDPBridge instance
    * @param {number} timeout - max wait time in ms
    * @param {Function} [onChunk] - streaming callback (null = full mode)
+   * @param {AbortSignal} [signal] - optional AbortSignal for cancellation
    * @returns {Promise<string>} Full response text
    */
-  async _captureSSEResponse(bridge, timeout, onChunk) {
+  async _captureSSEResponse(bridge, timeout, onChunk, signal) {
     let fullText = '';
     let done = false;
     let cleanupDone = false;
@@ -602,6 +610,27 @@ return response;
         resolveCapture(fullText);
       }
     }, timeout);
+
+    // Abort signal: user cancelled via overlay
+    if (signal) {
+      // Handle already-aborted signal (edge case)
+      if (signal.aborted) {
+        done = true;
+        console.log('[DoubaoAdapter] SSE capture signal already aborted');
+        await cleanup();
+        resolveCapture(fullText);
+        return capturePromise;
+      }
+
+      signal.addEventListener('abort', async () => {
+        if (!done) {
+          done = true;
+          console.log('[DoubaoAdapter] SSE capture cancelled by signal, returning partial text');
+          await cleanup();
+          resolveCapture(fullText);
+        }
+      }, { once: true });
+    }
 
     return capturePromise;
   }
@@ -746,7 +775,8 @@ return response;
       const mode = context.responseMode || 'sse-fetch';
       const userTimeout = context.timeout || 30000;
       const onChunk = typeof context.onChunk === 'function' ? context.onChunk : null;
-      console.log('[DoubaoAdapter] analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null));
+      const signal = context.signal || null;
+      console.log('[DoubaoAdapter] analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null) + ' hasSignal=' + (signal !== null));
 
       let response;
 
@@ -758,7 +788,7 @@ return response;
           throw new Error('CDP bridge 不可用，无法使用 SSE Fetch 模式');
         }
 
-        const ssePromise = this._captureSSEResponse(bridge, userTimeout, onChunk);
+        const ssePromise = this._captureSSEResponse(bridge, userTimeout, onChunk, signal);
 
         // Click send (trigger the request that SSE capture is waiting for)
         const clicked = await page.evaluate(clickSendScript());
@@ -776,7 +806,7 @@ return response;
         }
 
         response = await this._pollDomResponse(
-          page, beforeLastText, userTimeout, onChunk,
+          page, beforeLastText, userTimeout, onChunk, signal,
         );
       }
 
