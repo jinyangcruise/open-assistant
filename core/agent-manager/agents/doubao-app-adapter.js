@@ -911,11 +911,9 @@ return response;
   /**
    * Stop Doubao's AI generation by clicking the stop/cancel button.
    *
-   * During generation, Doubao shows a stop button inside:
-   *   div#flow-end-msg-send.send-btn-wrapper.group.\!hidden > button
-   *
-   * This method uses the existing CDP connection to click that button,
-   * telling Doubao to stop generating (not just silencing the adapter).
+   * During generation, the send button changes to a stop button.
+   * We detect generation state by checking absence of the asr_btn element,
+   * then find the stop/send button and click it directly.
    *
    * @returns {Promise<boolean>} true if the stop button was found and clicked
    */
@@ -926,15 +924,16 @@ return response;
     }
     try {
       const result = await this._page.evaluate(`(function() {
-        const container = document.getElementById('flow-end-msg-send');
-        if (!container) return { ok: false };
-        if (!container.classList.contains('send-btn-wrapper') ||
-            !container.classList.contains('group') ||
-            !container.classList.contains('!hidden')) {
-          return { ok: false };
+        // Check if Doubao is currently generating: asr_btn is absent during generation
+        var isGenerating = document.querySelector('[data-testid="asr_btn"]') === null;
+        if (!isGenerating) return { ok: false, reason: 'not generating' };
+
+        // Find the stop button (same element as send button, but in stop state)
+        var btn = document.getElementById('flow-end-msg-send');
+        if (!btn) {
+          btn = document.querySelector('[data-testid="chat_input_send_button"]');
         }
-        const btn = container.querySelector('button');
-        if (!btn) return { ok: false };
+        if (!btn) return { ok: false, reason: 'no stop button found' };
         btn.click();
         return { ok: true };
       })()`);
@@ -942,7 +941,7 @@ return response;
         debugLog('stopGeneration: stop button clicked');
         return true;
       }
-      debugLog('stopGeneration: conditions not met, stop button not found');
+      debugLog('stopGeneration: conditions not met:', result?.reason || 'unknown');
       return false;
     } catch (e) {
       debugLog('stopGeneration failed:', e.message);
