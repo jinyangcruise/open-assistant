@@ -13,6 +13,12 @@ const path = require('path');
 const http = require('http');
 const BaseAgent = require('../base-agent');
 
+// Dev-mode only logging: [DoubaoAdapter] logs only print with --dev flag
+const isDev = process.argv.includes('--dev');
+function debugLog(...args) {
+  if (isDev) console.log('[DoubaoAdapter]', ...args);
+}
+
 // ---------------------------------------------------------------------------
 // Doubao Desktop App DOM Selectors (mirrors OpenCLI's SEL in utils.js)
 // ---------------------------------------------------------------------------
@@ -258,7 +264,7 @@ class DoubaoAppAdapter extends BaseAgent {
    * @returns {Promise<string>} Response text
    */
   async _pollDomResponse(page, beforeLastText, timeout, onChunk, signal) {
-    console.log('[DoubaoAdapter] _pollDomResponse: timeout=' + timeout + ' beforeLastTextLen=' + (beforeLastText || '').length);
+    debugLog('_pollDomResponse: timeout=' + timeout + ' beforeLastTextLen=' + (beforeLastText || '').length);
     const POLL_MS = 200;
     const IDLE_TIMEOUT_MS = Math.min(1500, Math.floor(timeout / 3));
 
@@ -272,7 +278,7 @@ class DoubaoAppAdapter extends BaseAgent {
     while (totalMs < timeout) {
       // Check for cancellation
       if (signal && signal.aborted) {
-        console.log('[DoubaoAdapter] DOM poll cancelled by signal, returning partial text');
+        debugLog('DOM poll cancelled by signal, returning partial text');
         return lastText || '';
       }
 
@@ -285,10 +291,10 @@ class DoubaoAppAdapter extends BaseAgent {
           this._buildFastPollScript(beforeLastText),
         );
       } catch (evaluateError) {
-        console.log('[DoubaoAdapter] DOM poll evaluate failed:', evaluateError.message);
+        debugLog('DOM poll evaluate failed:', evaluateError.message);
         // If the connection was lost and we already have text, return it
         if (hasNewText && lastText) {
-          console.log('[DoubaoAdapter] Connection lost, returning partial text:', lastText.length, 'chars');
+          debugLog('Connection lost, returning partial text:', lastText.length, 'chars');
           return lastText;
         }
         // If we have no text at all, let the outer timeout handle it
@@ -317,7 +323,7 @@ class DoubaoAppAdapter extends BaseAgent {
         if (onChunk && lastText !== lastEmittedText) {
           const incremental = lastText.slice(lastEmittedText.length);
           if (incremental) {
-            console.log('[DoubaoAdapter] DOM poll onChunk, incremental length:', incremental.length);
+            debugLog('DOM poll onChunk, incremental length:', incremental.length);
             onChunk(incremental);
             lastEmittedText = lastText;
           }
@@ -527,13 +533,13 @@ class DoubaoAppAdapter extends BaseAgent {
         // to avoid duplicates during the transition period.
         const seq = args[2]?.value;
         if (typeof seq !== 'number') return;
-        console.log('[DoubaoAdapter] SSE chunk:', JSON.stringify(text));
+        debugLog('SSE chunk:', JSON.stringify(text));
         fullText += text;
         if (onChunk) onChunk(text);
       } else if (tag === '__SSE_RAW__' && typeof text === 'string') {
-        console.log('[DoubaoAdapter] SSE raw event:', text);
+        debugLog('SSE raw event:', text);
       } else if (tag === '__SSE_EVENT__' && typeof text === 'string') {
-        console.log('[DoubaoAdapter] SSE parsed:', text);
+        debugLog('SSE parsed:', text);
       } else if (tag === '__SSE_DONE__') {
         if (!done) {
           done = true;
@@ -548,7 +554,7 @@ class DoubaoAppAdapter extends BaseAgent {
     };
 
     // Enable Runtime domain for console.debug interception
-    console.log('[DoubaoAdapter] Runtime.enable + inject fetch interceptor');
+    debugLog('Runtime.enable + inject fetch interceptor');
     await bridge.send('Runtime.enable');
     bridge.on('Runtime.consoleAPICalled', onConsole);
 
@@ -563,7 +569,8 @@ class DoubaoAppAdapter extends BaseAgent {
     const injectScript = `(function(){
 // === ALWAYS update _proc (takes effect immediately) ===
 window.__sseProc=function _proc(raw){
-console.debug('__SSE_RAW__',raw.substring(0,300));
+var DEV=${isDev};
+if(DEV)console.debug('__SSE_RAW__',raw.substring(0,300));
 var lines=raw.split('\\n');
 var et='',ed='';
 for(var i=0;i<lines.length;i++){
@@ -571,10 +578,10 @@ var l=lines[i];
 if(l.indexOf('event:')===0)et=l.slice(6).trim();
 else if(l.indexOf('data:')===0)ed=l.slice(5).trim();
 }
-if(!et&&!ed){console.debug('__SSE_EVENT__','skip: no event, no data');return;}
-if(!et){console.debug('__SSE_EVENT__','skip: no event type, data='+ed.substring(0,150));return;}
-if(!ed){console.debug('__SSE_EVENT__','skip: no data, event='+et);return;}
-console.debug('__SSE_EVENT__','event='+et+' data='+ed.substring(0,300));
+if(!et&&!ed){if(DEV)console.debug('__SSE_EVENT__','skip: no event, no data');return;}
+if(!et){if(DEV)console.debug('__SSE_EVENT__','skip: no event type, data='+ed.substring(0,150));return;}
+if(!ed){if(DEV)console.debug('__SSE_EVENT__','skip: no data, event='+et);return;}
+if(DEV)console.debug('__SSE_EVENT__','event='+et+' data='+ed.substring(0,300));
 try{
 var d=JSON.parse(ed);
 if(et==='CHUNK_DELTA'&&d.text){
@@ -587,7 +594,6 @@ var t=blocks[j]&&blocks[j].content&&blocks[j].content.text_block&&blocks[j].cont
 if(t){if(!window.__sseTextSeq)window.__sseTextSeq=0;console.debug('__SSE_TEXT__',t,++window.__sseTextSeq);}
 }
 }else if(et==='STREAM_CHUNK'&&d.patch_op){
-// STREAM_CHUNK delivers incremental text via patch_op content blocks
 for(var k=0;k<d.patch_op.length;k++){
 var op=d.patch_op[k];
 if(op.patch_object===1&&op.patch_value&&op.patch_value.content_block){
@@ -599,7 +605,7 @@ if(ct){if(!window.__sseTextSeq)window.__sseTextSeq=0;console.debug('__SSE_TEXT__
 }
 }
 }
-}catch(e){console.debug('__SSE_EVENT__','json_parse_fail:'+(e&&e.message));}
+}catch(e){if(DEV)console.debug('__SSE_EVENT__','json_parse_fail:'+(e&&e.message));}
 };
 // === Only install the fetch wrapper once ===
 if(window.__sseWrapperInstalled)return;
@@ -653,7 +659,7 @@ return response;
       // Handle already-aborted signal (edge case)
       if (signal.aborted) {
         done = true;
-        console.log('[DoubaoAdapter] SSE capture signal already aborted');
+        debugLog('SSE capture signal already aborted');
         await cleanup();
         resolveCapture(fullText);
         return capturePromise;
@@ -662,7 +668,7 @@ return response;
       signal.addEventListener('abort', async () => {
         if (!done) {
           done = true;
-          console.log('[DoubaoAdapter] SSE capture cancelled by signal, returning partial text');
+          debugLog('SSE capture cancelled by signal, returning partial text');
           await cleanup();
           resolveCapture(fullText);
         }
@@ -713,14 +719,14 @@ return response;
       // List available target types for debugging
       const types = [...new Set(targets.map((t) => t.type))].join(', ');
       const urls = targets.map((t) => (t.url || '(empty)')).filter(Boolean);
-      console.log('[DoubaoAdapter] preCheck: no chat target. Available types:', types, 'urls:', urls);
+      debugLog('preCheck: no chat target. Available types:', types, 'urls:', urls);
       throw new Error(
         '豆包聊天窗口未打开。请打开豆包聊天页面后重试。' +
         `（当前可用目标类型: ${types}）`
       );
     }
 
-    console.log('[DoubaoAdapter] preCheck: found chat target —', chatTarget.url);
+    debugLog('preCheck: found chat target —', chatTarget.url);
   }
 
   // ===================================================================
@@ -798,7 +804,7 @@ return response;
           return '';
         })()`);
       } catch (e) {
-        console.log('[DoubaoAdapter] Could not capture beforeLastText:', e.message);
+        debugLog('Could not capture beforeLastText:', e.message);
         beforeLastText = '';
       }
 
@@ -815,7 +821,7 @@ return response;
       const userTimeout = context.timeout || 30000;
       const onChunk = typeof context.onChunk === 'function' ? context.onChunk : null;
       const signal = context.signal || null;
-      console.log('[DoubaoAdapter] analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null) + ' hasSignal=' + (signal !== null));
+      debugLog('analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null) + ' hasSignal=' + (signal !== null));
 
       let response;
 

@@ -11,6 +11,12 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// Dev-mode only logging
+const isDev = process.argv.includes('--dev');
+function debugLog(...args) {
+  if (isDev) console.log(...args);
+}
+
 /**
  * Paste text to current cursor position
  * Uses system clipboard + OS-level paste simulation (single batch)
@@ -128,13 +134,13 @@ class StreamingPaster {
    * ensuring synchronous clipboard access.
    */
   async _processQueue() {
-    console.log('[StreamingPaster] _processQueue started, pending:', this._pending.length);
+    debugLog('[StreamingPaster] _processQueue started, pending:', this._pending.length);
     while (this._pending.length > 0) {
       const text = this._pending.shift();
 
       // null = flush signal from finish()
       if (text === null) {
-        console.log('[StreamingPaster] flush signal received, restoring clipboard');
+        debugLog('[StreamingPaster] flush signal received, restoring clipboard');
         this._finished = true;
         clipboard.writeText(this._originalClipboard);
         if (this._flushResolve) {
@@ -148,16 +154,16 @@ class StreamingPaster {
       try {
         // clipboard.writeText runs SYNCHRONOUSLY before await
         clipboard.writeText(text);
-        console.log('[StreamingPaster] wrote to clipboard, length:', text.length);
+        debugLog('[StreamingPaster] wrote to clipboard, length:', text.length);
         await sleep(20);
         await simulatePaste();
-        console.log('[StreamingPaster] paste completed');
+        debugLog('[StreamingPaster] paste completed');
         await sleep(30);
       } catch (err) {
         console.warn('[StreamingPaster] push failed:', err);
       }
     }
-    console.log('[StreamingPaster] _processQueue finished');
+    debugLog('[StreamingPaster] _processQueue finished');
     this._busy = false;
   }
 
@@ -170,7 +176,7 @@ class StreamingPaster {
     // Flush any remaining batch first
     this._flushBatch();
 
-    console.log('[StreamingPaster] finish called, pending:', this._pending.length);
+    debugLog('[StreamingPaster] finish called, pending:', this._pending.length);
 
     return new Promise((resolve) => {
       this._flushResolve = resolve;
