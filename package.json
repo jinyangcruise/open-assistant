@@ -45,6 +45,7 @@
       "preload.js",
       "core/**/*",
       "renderer/**/*",
+      "overlay/**/*",
       "config.json",
       "assets/**/*"
     ],
