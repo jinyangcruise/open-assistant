@@ -144,6 +144,7 @@ class DoubaoAppAdapter extends BaseAgent {
           !u.startsWith('about:') &&
           !u.includes('doubao-background') &&
           !u.includes('doubao-launcher') &&
+          !u.includes('doubao-text-picker') &&
           u !== '' &&
           (t.type === 'page' || t.type === 'webview' || t.type === 'app')
         );
@@ -710,6 +711,7 @@ return response;
         !u.startsWith('about:') &&
         !u.includes('doubao-background') &&
         !u.includes('doubao-launcher') &&
+        !u.includes('doubao-text-picker') &&
         u !== '' &&
         (t.type === 'page' || t.type === 'webview' || t.type === 'app')
       );
