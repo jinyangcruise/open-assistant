@@ -68,11 +68,19 @@ function setupEventListeners() {
     await triggerAssistant();
   });
   
-  // Config form
-  configForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    await saveConfig();
-  });
+  // Auto-save on any form field change
+  const formInputs = configForm.querySelectorAll('input, select');
+  for (const input of formInputs) {
+    input.addEventListener('change', async () => {
+      await saveConfig();
+    });
+    // For text inputs (shortcut, cdpEndpoint), also save on blur
+    if (input.type === 'text') {
+      input.addEventListener('blur', async () => {
+        await saveConfig();
+      });
+    }
+  }
   
   // Reset button
   resetBtn.addEventListener('click', async () => {
@@ -139,10 +147,8 @@ async function saveConfig() {
     config = await window.electronAPI.updateConfig(updates);
     shortcutDisplay.textContent = config.shortcut.replace('Control', 'Ctrl');
     addLog('Configuration saved', 'success');
-    alert('Configuration saved successfully!');
   } catch (error) {
     addLog(`Failed to save config: ${error.message}`, 'error');
-    alert('Failed to save configuration');
   }
 }
 
