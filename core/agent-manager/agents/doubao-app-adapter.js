@@ -428,7 +428,8 @@ class DoubaoAppAdapter extends BaseAgent {
   async _pollDomResponse(page, beforeLastText, timeout, onChunk, signal) {
     debugLog('_pollDomResponse: timeout=' + timeout + ' beforeLastTextLen=' + (beforeLastText || '').length);
     const POLL_MS = 200;
-    const IDLE_TIMEOUT_MS = Math.min(1500, Math.floor(timeout / 3));
+    // Safety wall-clock limit — very large; real timeout is idle-based (see below).
+    const MAX_WALL_CLOCK = Math.max(timeout * 20, 600000); // 20x timeout or 10min
 
     let lastText = beforeLastText;
     let lastEmittedText = beforeLastText;
@@ -437,7 +438,7 @@ class DoubaoAppAdapter extends BaseAgent {
     let hasNewText = false;
     let seenNewMessage = false;
 
-    while (totalMs < timeout) {
+    while (totalMs < MAX_WALL_CLOCK) {
       // Check for cancellation
       if (signal && signal.aborted) {
         debugLog('DOM poll cancelled by signal, returning partial text');
@@ -468,7 +469,7 @@ class DoubaoAppAdapter extends BaseAgent {
 
       if (!result) continue;
 
-      // --- Detect new text → reset idle timer ---
+      // --- Detect new text → reset idle timer (like SSE __SSE_TEXT__) ---
       if (result.text && result.text !== lastText) {
         // First detection of the new assistant message: reset emitted cursor
         // so incremental slice starts from beginning of new message.
@@ -495,17 +496,24 @@ class DoubaoAppAdapter extends BaseAgent {
       }
 
       // --- PRIMARY COMPLETION: asr_btn reappeared → generation done ---
+      // (Equivalent to SSE's __SSE_DONE__)
       if (hasNewText && result.text && result.hasAsrBtn) {
         return result.text;
       }
 
-      // --- FALLBACK: idle timeout → no new output for a while ---
-      if (hasNewText && idleMs >= IDLE_TIMEOUT_MS) {
-        return result.text || '';
+      // --- IDLE TIMEOUT: no new text for `timeout` ms ---
+      // (Same semantics as SSE mode's idle timeout)
+      if (idleMs >= timeout) {
+        if (hasNewText) {
+          // Had text, then went idle → return what we have (like SSE timeout)
+          return result.text || '';
+        }
+        // No text at all — truly stalled
+        throw new Error(`豆包未在 ${timeout / 1000} 秒内返回回复`);
       }
     }
 
-    throw new Error(`豆包未在 ${timeout / 1000} 秒内返回回复`);
+    throw new Error(`豆包未在 ${timeout / 1000} 秒内返回回复（总等待 ${MAX_WALL_CLOCK / 1000}s）`);
   }
 
   // ===================================================================
