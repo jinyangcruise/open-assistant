@@ -344,7 +344,15 @@ async function savePrompt() {
 const agentsList = document.getElementById('agentsList');
 
 function setupAgentEventListeners() {
-  // No specific setup needed; event handlers are attached in renderAgents()
+  // Card toggle via event delegation
+  agentsList.addEventListener('click', function(e) {
+    var card = e.target.closest('.agent-item');
+    if (!card) return;
+    // Don't toggle when clicking on form controls or interactive elements
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+    var agentId = card.dataset.agentId;
+    if (agentId) toggleAgent(agentId);
+  });
 }
 
 async function loadAgents() {
@@ -393,6 +401,7 @@ function renderAgents() {
       '    <label class="agent-endpoint-label">CDP Endpoint:</label>' +
       '    <input type="text" class="agent-endpoint-input" data-agent-id="' + a.id + '" ' +
       '      value="' + escapeHtml(a.endpoint) + '" />' +
+      '    <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">Test</button>' +
       '  </div>' +
       '  <div class="agent-install-path">' +
       '    <label class="install-path-label">Install Path:</label>' +
@@ -408,15 +417,13 @@ function renderAgents() {
       '    <button class="btn btn-xs btn-secondary record-btn" data-agent-id="' + a.id + '">' +
       (shortcut ? '修改' : '录制') +
       '    </button>' +
+      (shortcut ? '<button class="btn btn-xs btn-ghost clear-btn" data-agent-id="' + a.id + '" title="清除快捷键">清空</button>' : '') +
       '  </div>' +
-      '</div>' +
-      '<div class="agent-item-actions">' +
-      '  <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">Test</button>' +
       '</div>';
 
     agentsList.appendChild(item);
 
-    // Checkbox toggle
+    // Checkbox toggle via change event (the actual checkbox input)
     var checkbox = item.querySelector('.agent-checkbox');
     checkbox.addEventListener('change', (function(agentId) {
       return async function(e) {
@@ -424,12 +431,6 @@ function renderAgents() {
         await toggleAgent(agentId);
       };
     })(a.id));
-
-    // Click on the card itself also toggles (via the checkbox)
-    var checkboxDiv = item.querySelector('.agent-item-checkbox');
-    checkboxDiv.addEventListener('click', function(e) {
-      e.stopPropagation();
-    });
 
     // Auto-save install path on change/blur
     (function(agentId, input) {
@@ -460,11 +461,6 @@ function renderAgents() {
         await window.electronAPI.updateAgentConfig(agentId, { endpoint: value });
       });
     })(a.id, item.querySelector('.agent-endpoint-input'));
-
-    // Prevent click on input rows from triggering agent selection
-    item.querySelector('.agent-endpoint-row').addEventListener('click', function(e) { e.stopPropagation(); });
-    item.querySelector('.agent-install-path').addEventListener('click', function(e) { e.stopPropagation(); });
-    item.querySelector('.agent-shortcut-row').addEventListener('click', function(e) { e.stopPropagation(); });
   }
 
   // Attach record button handlers
@@ -477,6 +473,20 @@ function renderAgents() {
         showShortcutRecorder(agentId);
       });
     })(recordBtns[j]);
+  }
+
+  // Attach clear button handlers
+  var clearBtns = agentsList.querySelectorAll('.clear-btn');
+  for (var l = 0; l < clearBtns.length; l++) {
+    (function(btn) {
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        var agentId = btn.dataset.agentId;
+        await window.electronAPI.updateAgentConfig(agentId, { shortcut: '' });
+        addLog('Shortcut cleared for ' + agentId, 'info');
+        await loadAgents();
+      });
+    })(clearBtns[l]);
   }
 
   // Attach test button handlers

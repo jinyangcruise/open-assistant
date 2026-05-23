@@ -368,20 +368,25 @@ function launchDoubaoWithDebug() {
   });
 }
 
-// Register global shortcuts for all agents
+// Register global shortcuts for all selected agents
 function registerAllShortcuts() {
   globalShortcut.unregisterAll();
 
   const agents = AgentRegistry.getAll();
-  const registeredShortcuts = new Set();
+  const selectedIds = AgentRegistry.getSelectedIds();
+  const registeredShortcuts = new Map(); // shortcut -> first selected agent that owns it
   let count = 0;
 
   for (const agent of agents) {
+    // Only register shortcuts for selected/checked agents
+    if (!selectedIds.includes(agent.id)) continue;
+
     const shortcut = store.get(`agents.${agent.id}.shortcut`);
     if (!shortcut) continue;
 
+    // If this shortcut is already registered for another selected agent, skip
     if (registeredShortcuts.has(shortcut)) {
-      console.warn(`[Main] Shortcut "${shortcut}" conflict: ${agent.id} skipped (already used by another agent)`);
+      console.log(`[Main] Shortcut "${shortcut}" already registered for "${registeredShortcuts.get(shortcut)}", skipping "${agent.id}"`);
       continue;
     }
 
@@ -390,7 +395,7 @@ function registerAllShortcuts() {
     });
 
     if (registered) {
-      registeredShortcuts.add(shortcut);
+      registeredShortcuts.set(shortcut, agent.id);
       count++;
       console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}`);
     } else {
@@ -398,7 +403,7 @@ function registerAllShortcuts() {
     }
   }
 
-  console.log(`[Main] Registered ${count} shortcut(s) for ${agents.length} agent(s)`);
+  console.log(`[Main] Registered ${count} shortcut(s) for selected agents`);
 }
 
 // Main shortcut handler
@@ -671,6 +676,7 @@ function setupIpcHandlers() {
   ipcMain.handle('toggle-agent', (event, id) => {
     const isSelected = AgentRegistry.toggleSelected(id);
     rebuildTrayMenu(); // Update tray menu (e.g. show/hide Initialize Doubao)
+    registerAllShortcuts(); // Re-register shortcuts based on new selection
     return { success: true, selected: isSelected };
   });
 
@@ -681,16 +687,6 @@ function setupIpcHandlers() {
 
   // Update agent config (e.g. install_path, endpoint, shortcut)
   ipcMain.handle('update-agent-config', (event, agentId, updates) => {
-    // If updating shortcut, check for conflicts with other agents
-    if (updates.shortcut) {
-      const agents = store.get('agents') || {};
-      for (const [otherId, otherConfig] of Object.entries(agents)) {
-        if (otherId !== agentId && otherConfig.shortcut === updates.shortcut) {
-          return { success: false, error: '快捷键已被其他 Agent 使用' };
-        }
-      }
-    }
-
     const agentPath = `agents.${agentId}`;
     Object.keys(updates).forEach(key => {
       store.set(`${agentPath}.${key}`, updates[key]);

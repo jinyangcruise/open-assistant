@@ -145,6 +145,22 @@ section h2 {
   background-color: #f9fafb;
 }
 
+.btn-ghost {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.btn-ghost:hover {
+  color: var(--error-color);
+  background-color: #fef2f2;
+}
+
 .shortcut-hint {
   font-size: 0.9rem;
   opacity: 0.9;
@@ -550,12 +566,8 @@ footer a:hover {
   color: var(--warning-color);
 }
 
-.agent-item-actions {
-  flex-shrink: 0;
-}
-
 .btn-xs {
-  padding: 0.25rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   font-size: 0.75rem;
 }
 
@@ -602,7 +614,7 @@ footer a:hover {
 /* Agent Shortcut Row */
 .agent-shortcut-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.35rem;
   margin-top: 0.35rem;
 }
@@ -616,8 +628,7 @@ footer a:hover {
 }
 
 .shortcut-input-wrapper {
-  flex: 1;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 /* Shortcut Display (readonly text) */
@@ -631,6 +642,7 @@ footer a:hover {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   min-width: 100px;
+  cursor: default;
 }
 
 /* Shortcut Recorder Modal */
