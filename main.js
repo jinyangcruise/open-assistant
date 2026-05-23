@@ -138,6 +138,10 @@ function showOverlay(x, y) {
     width: winWidth, height: winHeight,
   });
   overlayWindow.showInactive(); // Show without stealing focus
+  // moveTop brings the window above other windows without activating it.
+  // This is needed because Windows' showInactive (SW_SHOWNOACTIVATE) may
+  // place a previously-hidden window behind the active foreground window.
+  overlayWindow.moveTop();
   // Disable forwarding immediately so the bar is interactive on appearance.
   // mouseleave on the bar will re-enable forwarding when the user moves away.
   overlayWindow.setIgnoreMouseEvents(false);
