@@ -871,18 +871,52 @@ return response;
       // 0. Find and connect to a verified Doubao chat page (positive DOM check)
       page = await this._findOrVerifyChatPage();
 
-      // 3. Wake up hidden/minimized renderer before any DOM interaction.
-      //    After restart, the page's lazy components (incl. file input) only
-      //    render when the page is active. Must bringToFront BEFORE upload.
+      // 1. Send a quick init message to trigger React lazy component rendering,
+      //    including the file input for screenshot upload. Without this, the
+      //    file input may not be mounted when the page is in the background.
+      //    Sending text alone isn't enough — we also upload a tiny image to
+      //    force the file input to render.
+      //    The subsequent analysis prompt will interrupt this test response.
+      //    NOTE: We always check the DOM (no cached flag) because the page
+      //    may change between calls (different conversation, navigation, etc.).
       try {
-        await page.cdp('Page.bringToFront');
-        debugLog('bringToFront (wake) succeeded');
-        await sleep(0.5);
+        const hasFileInput = await page.evaluate(
+          `document.querySelector('${FILE_INPUT}') !== null`,
+        );
+        if (!hasFileInput) {
+          debugLog('analyze: lazy components not mounted, sending init message with image...');
+
+          // 1a. Create a tiny 1x1 white PNG for upload
+          const fs = require('fs');
+          const os = require('os');
+          const path2 = require('path');
+          const miniPngPath = path2.join(os.tmpdir(), 'oa-init-' + Date.now() + '.png');
+          const miniPng = Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            'base64',
+          );
+          fs.writeFileSync(miniPngPath, miniPng);
+
+          // 1b. Upload the tiny image (triggers file input mounting)
+          await this._uploadScreenshot(page, miniPngPath);
+          try { fs.unlinkSync(miniPngPath); } catch (_) { /* ignore */ }
+
+          // 1c. Inject and send text message
+          const { injectTextScript, clickSendScript } = await _getOpencliUtils();
+          await page.evaluate(injectTextScript('你好，我是一个智能小助手。'));
+          await sleep(0.3);
+          await page.pressKey('Enter');
+          await page.evaluate(clickSendScript());
+          await sleep(2);
+          debugLog('analyze: init message sent with image, lazy components should be mounted');
+        } else {
+          debugLog('analyze: file input already mounted, skipping init');
+        }
       } catch (e) {
-        debugLog('bringToFront (wake) failed:', e.message);
+        debugLog('analyze: init message failed (harmless):', e.message);
       }
 
-      // 4. Save screenshot and upload
+      // 3. Save screenshot and upload
       tmpFile = this._saveTempScreenshot(screenshotBuffer);
       debugLog('analyze: uploading screenshot...');
       await this._uploadScreenshot(page, tmpFile);
@@ -946,14 +980,6 @@ return response;
 
         const ssePromise = this._captureSSEResponse(bridge, userTimeout, onChunk, signal);
 
-        // Ensure page is active before clicking send (window may be minimized/hidden)
-        try {
-          await page.cdp('Page.bringToFront');
-          await sleep(0.3);
-        } catch (e) {
-          debugLog('bringToFront before send failed:', e.message);
-        }
-
         // Click send (trigger the request that SSE capture is waiting for)
         // CDP Enter is most reliable for textarea-based input
         debugLog('analyze: sending (sse-fetch mode)...');
@@ -965,14 +991,6 @@ return response;
 
       } else {
         // === DOM POLL MODE ===
-        // Ensure page is active before clicking send
-        try {
-          await page.cdp('Page.bringToFront');
-          await sleep(0.3);
-        } catch (e) {
-          debugLog('bringToFront before send failed:', e.message);
-        }
-
         // CDP Enter is most reliable for textarea-based input
         debugLog('analyze: sending (dom-poll mode)...');
         await page.pressKey('Enter');
@@ -1065,10 +1083,6 @@ return response;
       if (parsed.found && (parsed.valueLen > 0 || parsed.textLen > 0)) {
         debugLog('stopGeneration: content still in input (' + parsed.valueLen + '/' + parsed.textLen + ' chars), sending now...');
         try {
-          // Bring page to front for reliable interaction
-          debugLog('stopGeneration: bringToFront...');
-          await this._page.cdp('Page.bringToFront');
-          await new Promise(r => setTimeout(r, 200));
           // Focus the input element
           await this._page.evaluate(`(function() {
             var input = document.querySelector('${SEL.INPUT}');
