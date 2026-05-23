@@ -330,6 +330,41 @@ class DoubaoAppAdapter extends BaseAgent {
     return { success: false };
   }
 
+  /**
+   * Poll the DOM to confirm the content was actually sent.
+   * Checks three signals:
+   *   1. Break button visible → generation started → content sent
+   *   2. asr_btn removed → generation in progress → content sent
+   *   3. Textarea value/textContent cleared → content was dispatched
+   *
+   * Polls every 100ms for up to 3 seconds.
+   *
+   * @param {Object} page - CDPPage instance
+   * @returns {Promise<boolean>} true if send was confirmed
+   */
+  async _waitSendConfirm(page) {
+    for (let i = 0; i < 30; i++) {  // up to 3 seconds (30 × 100ms)
+      const result = await page.evaluate(`(function() {
+        // 1. Break button visible → generation started → content sent
+        if (document.querySelector('[data-testid="chat_input_local_break_button"]')) return 'sent:break';
+        // 2. asr_btn removed → generation in progress → content sent
+        if (!document.querySelector('[data-testid="asr_btn"]')) return 'sent:no_asr';
+        // 3. Textarea content cleared → content was dispatched
+        var input = document.querySelector('${SEL.INPUT}');
+        if (input && !input.value && !input.textContent) return 'sent:empty';
+        return 'pending:' + (input ? (input.value||'').length + ',' + (input.textContent||'').length : 'no_input');
+      })()`);
+      if (result.startsWith('sent')) {
+        debugLog('_waitSendConfirm: confirmed (' + result + ') at iteration ' + i);
+        return true;
+      }
+      if (i % 10 === 0) debugLog('_waitSendConfirm: iter ' + i + ' state=' + result);
+      await new Promise(r => setTimeout(r, 100));
+    }
+    debugLog('_waitSendConfirm: timeout after 3s, content may not have been sent');
+    return false;
+  }
+
   // ===================================================================
   //  DOM POLL MODE — asr_btn-based polling (primary capture method)
 
@@ -660,13 +695,13 @@ class DoubaoAppAdapter extends BaseAgent {
         // to avoid duplicates during the transition period.
         const seq = args[2]?.value;
         if (typeof seq !== 'number') return;
-        debugLog('SSE chunk:', JSON.stringify(text));
+        //debugLog('SSE chunk:', JSON.stringify(text));
         fullText += text;
         if (onChunk) onChunk(text);
       } else if (tag === '__SSE_RAW__' && typeof text === 'string') {
-        debugLog('SSE raw event:', text);
+        //debugLog('SSE raw event:', text);
       } else if (tag === '__SSE_EVENT__' && typeof text === 'string') {
-        debugLog('SSE parsed:', text);
+        //debugLog('SSE parsed:', text);
       } else if (tag === '__SSE_DONE__') {
         if (!done) {
           done = true;
@@ -849,7 +884,9 @@ return response;
 
       // 4. Save screenshot and upload
       tmpFile = this._saveTempScreenshot(screenshotBuffer);
+      debugLog('analyze: uploading screenshot...');
       await this._uploadScreenshot(page, tmpFile);
+      debugLog('analyze: screenshot upload done');
 
       // 5. Build the prompt
       const hasScreenshot = true;
@@ -881,18 +918,20 @@ return response;
       }
 
       // 8. Inject text into chat input
+      debugLog('analyze: injecting text...');
       const injected = await page.evaluate(injectTextScript(prompt));
       if (!injected || !injected.ok) {
         throw new Error('无法在豆包聊天输入框中输入文本');
       }
+      debugLog('analyze: text injected, sleeping 0.5s...');
 
       await sleep(0.5);
 
       // 9. Determine capture mode and output options
+      const signal = context.signal || null;
       const mode = context.responseMode || 'sse-fetch';
       const userTimeout = context.timeout || 30000;
       const onChunk = typeof context.onChunk === 'function' ? context.onChunk : null;
-      const signal = context.signal || null;
       debugLog('analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null) + ' hasSignal=' + (signal !== null));
 
       let response;
@@ -916,10 +955,11 @@ return response;
         }
 
         // Click send (trigger the request that SSE capture is waiting for)
-        const clicked = await page.evaluate(clickSendScript());
-        if (!clicked) {
-          await page.pressKey('Enter');
-        }
+        // CDP Enter is most reliable for textarea-based input
+        debugLog('analyze: sending (sse-fetch mode)...');
+        await page.pressKey('Enter');
+        // Also try clicking the send button as backup
+        await page.evaluate(clickSendScript());
 
         response = await ssePromise;
 
@@ -933,14 +973,27 @@ return response;
           debugLog('bringToFront before send failed:', e.message);
         }
 
-        const clicked = await page.evaluate(clickSendScript());
-        if (!clicked) {
-          await page.pressKey('Enter');
-        }
+        // CDP Enter is most reliable for textarea-based input
+        debugLog('analyze: sending (dom-poll mode)...');
+        await page.pressKey('Enter');
+        // Also try clicking the send button as backup
+        await page.evaluate(clickSendScript());
 
         response = await this._pollDomResponse(
           page, beforeLastText, userTimeout, onChunk, signal,
         );
+      }
+
+      // ── If cancelled: stop the AI generation now that content was sent ──
+      // stopGeneration() runs here instead of in the IPC handler because at this
+      // point the content has been dispatched and the break button is visible.
+      if (signal && signal.aborted) {
+        debugLog('analyze: signal was aborted, stopping generation...');
+        try {
+          await this.stopGeneration();
+        } catch (e) {
+          debugLog('analyze: stopGeneration failed:', e.message);
+        }
       }
 
       if (!response) {
@@ -977,6 +1030,54 @@ return response;
       return false;
     }
     try {
+      // ── Pre-step: If content is still in the input, send it first ──
+      // This handles the case where user cancels before analyze() has sent.
+      // After confirming the content is sent, we proceed to stop generation.
+      debugLog('stopGeneration: checking input content...');
+      const inputState = await this._page.evaluate(`(function() {
+        var input = document.querySelector('${SEL.INPUT}');
+        if (!input) return JSON.stringify({ found: false });
+        return JSON.stringify({
+          found: true,
+          valueLen: (input.value||'').length,
+          textLen: (input.textContent||'').length,
+          breakBtn: !!document.querySelector('[data-testid="chat_input_local_break_button"]'),
+          asrBtn: !!document.querySelector('[data-testid="asr_btn"]'),
+        });
+      })()`);
+      debugLog('stopGeneration: input state: ' + inputState);
+      var parsed = JSON.parse(inputState);
+      if (parsed.found && (parsed.valueLen > 0 || parsed.textLen > 0)) {
+        debugLog('stopGeneration: content still in input (' + parsed.valueLen + '/' + parsed.textLen + ' chars), sending now...');
+        try {
+          // Bring page to front for reliable interaction
+          debugLog('stopGeneration: bringToFront...');
+          await this._page.cdp('Page.bringToFront');
+          await new Promise(r => setTimeout(r, 200));
+          // Focus the input element
+          await this._page.evaluate(`(function() {
+            var input = document.querySelector('${SEL.INPUT}');
+            if (input) { input.focus(); input.dispatchEvent(new Event('focus', { bubbles: true })); }
+          })()`);
+          await new Promise(r => setTimeout(r, 100));
+          // CDP Enter — most reliable for textarea-based send
+          debugLog('stopGeneration: pressKey Enter...');
+          await this._page.pressKey('Enter');
+          // Also try clicking the send button as backup
+          const { clickSendScript } = await _getOpencliUtils();
+          debugLog('stopGeneration: clickSendScript...');
+          await this._page.evaluate(clickSendScript());
+          // Poll DOM to confirm content was actually sent
+          debugLog('stopGeneration: waiting for send confirmation...');
+          const confirmed = await this._waitSendConfirm(this._page);
+          debugLog('stopGeneration: send confirmed=' + confirmed);
+        } catch (e) {
+          debugLog('stopGeneration: send pre-step failed:', e.message);
+        }
+      } else {
+        debugLog('stopGeneration: no content in input, skipping send (breakBtn=' + parsed.breakBtn + ' asrBtn=' + parsed.asrBtn + ')');
+      }
+
       // ── Attempt 1: Click the stop button ──
       // During generation, Doubao shows a visible div with
       // data-testid="chat_input_local_break_button" containing a stop icon.
