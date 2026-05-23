@@ -502,7 +502,6 @@ async function handleShortcut(agentId) {
     // 5. Output result
     if (wasCancelled) {
       console.log('Shortcut handler: analysis was cancelled by user, keeping partial paste');
-      showNotification('Cancelled', 'AI generation cancelled');
       // Still need to finish streaming paster to restore clipboard
       if (streamingPaster) {
         await streamingPaster.finish();
@@ -539,7 +538,6 @@ async function handleShortcut(agentId) {
     // Don't show error notification for user-initiated cancellations
     if (error.name === 'AbortError' || (currentAbortController && currentAbortController.signal.aborted)) {
       console.log('Shortcut handler: cancelled by user');
-      showNotification('Cancelled', 'AI generation cancelled');
     } else {
       console.error('Error in shortcut handler:', error);
       showNotification('Error', error.message || 'Failed to process request');
@@ -733,6 +731,10 @@ function setupIpcHandlers() {
   // Cancel current processing from the overlay's cancel button
   // Also tells Doubao to stop generating via CDP (if adapter supports it)
   ipcMain.on('cancel-processing', () => {
+    // Hide overlay immediately so the bar disappears right away.
+    // stopGeneration continues in the background (SSE capture abort →
+    // stop generation retry loop), but the user sees instant feedback.
+    hideOverlay();
     // Abort current processing — analyze() will handle stopping generation
     // after content has been sent (when the break button is actually visible).
     const controller = currentAbortController;
