@@ -668,10 +668,25 @@ class DoubaoAppAdapter extends BaseAgent {
     let fullText = '';
     let done = false;
     let cleanupDone = false;
+    let idleTimeout = null;
+
+    /** Reset the idle timeout — fires only when no chunks arrive for `timeout` ms */
+    const resetIdleTimeout = () => {
+      if (idleTimeout) clearTimeout(idleTimeout);
+      idleTimeout = setTimeout(async () => {
+        if (!done) {
+          done = true;
+          debugLog('SSE capture idle timeout after ' + (timeout / 1000) + 's of inactivity');
+          await cleanup();
+          resolveCapture(fullText);
+        }
+      }, timeout);
+    };
 
     const cleanup = async () => {
       if (cleanupDone) return;
       cleanupDone = true;
+      if (idleTimeout) { clearTimeout(idleTimeout); idleTimeout = null; }
       try { await bridge.send('Runtime.disable'); } catch (_) { /* ignore */ }
       bridge.off('Runtime.consoleAPICalled', onConsole);
     };
@@ -698,6 +713,8 @@ class DoubaoAppAdapter extends BaseAgent {
         //debugLog('SSE chunk:', JSON.stringify(text));
         fullText += text;
         if (onChunk) onChunk(text);
+        // Reset idle timeout — AI is still generating content
+        resetIdleTimeout();
       } else if (tag === '__SSE_RAW__' && typeof text === 'string') {
         //debugLog('SSE raw event:', text);
       } else if (tag === '__SSE_EVENT__' && typeof text === 'string') {
@@ -822,14 +839,11 @@ return response;
 
     await bridge.send('Runtime.evaluate', { expression: injectScript });
 
-    // Timeout safety
-    setTimeout(async () => {
-      if (!done) {
-        done = true;
-        await cleanup();
-        resolveCapture(fullText);
-      }
-    }, timeout);
+    // Idle timeout safety — resets on every __SSE_TEXT__ chunk.
+    // Fires only when no chunks arrive for `timeout` ms, meaning the
+    // AI has stopped responding (not that the total generation exceeded
+    // a wall-clock limit). This avoids truncating long responses.
+    resetIdleTimeout();
 
     // Abort signal: user cancelled via overlay
     if (signal) {
