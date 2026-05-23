@@ -73,31 +73,6 @@ async function _getOpencliUtils() {
 }
 
 // ---------------------------------------------------------------------------
-// Analysis prompt builder (application-specific)
-// ---------------------------------------------------------------------------
-
-function buildAnalysisPrompt(context, hasScreenshot) {
-  const screenshotNote = hasScreenshot
-    ? '我发送了一张屏幕截图，请分析截图中的内容'
-    : '请分析当前屏幕内容（截图上传可能未成功，如能看到请分析）';
-
-  return `${screenshotNote}，并提供智能补全建议。
-
-${context.appName && context.appName !== 'Unknown' ? '当前应用: ' + context.appName : ''}
-
-要求：
-1. 判断我正在做什么（写代码/写文档/其他）
-2. 如果是代码，识别编程语言和上下文
-3. 根据上下文，提供智能补全建议
-4. 只返回补全内容，不要解释
-5. 保持代码格式和缩进
-6. 根据用户使用的编程语言和工具，使用正确的缩进方式（空格/制表符）
-7. 不要重复用户已有的内容，例如用户写的注释
-
-请直接分析屏幕截图并返回补全建议：`;
-}
-
-// ---------------------------------------------------------------------------
 // Simple sleep helper (avoids page.wait → waitForDomStableJs)
 // ---------------------------------------------------------------------------
 
@@ -950,12 +925,11 @@ return response;
       await this._uploadScreenshot(page, tmpFile);
       debugLog('analyze: screenshot upload done');
 
-      // 5. Build the prompt
-      const hasScreenshot = true;
+      // 5. Build the prompt — now loaded from config by main.js
       const prompt =
         context.customPrompt && context.customPrompt.trim()
           ? context.customPrompt.trim()
-          : buildAnalysisPrompt(context, hasScreenshot);
+          : '请分析截图并提供补全建议';
 
       // 6. Use OpenCLI's utils for DOM interaction (injectText, clickSend)
       const { injectTextScript, clickSendScript } =

@@ -436,10 +436,14 @@ async function handleShortcut(agentId) {
     const screenshotBuffer = await takeScreenshot();
     console.log('Screenshot captured:', screenshotBuffer.length, 'bytes');
 
-    // 3. Get selected prompt (if custom)
+    // 3. Get selected prompt
     let customPrompt = null;
     const selectedId = store.get('selected_prompt_id');
-    if (selectedId && selectedId !== 'system-default') {
+    if (selectedId && selectedId === 'system-default') {
+      // Load the built-in default prompt from config
+      customPrompt = (store.get('default_prompt') || '').trim();
+      if (customPrompt) console.log('Using system default prompt');
+    } else if (selectedId) {
       const prompts = store.get('prompts') || [];
       const found = prompts.find(function(p) { return p.id === selectedId; });
       if (found && found.content && found.content.trim()) {
@@ -624,7 +628,8 @@ function setupIpcHandlers() {
   ipcMain.handle('get-prompts', () => {
     return {
       prompts: store.get('prompts') || [],
-      selectedId: store.get('selected_prompt_id') || 'system-default'
+      selectedId: store.get('selected_prompt_id') || 'system-default',
+      defaultPrompt: store.get('default_prompt') || ''
     };
   });
 

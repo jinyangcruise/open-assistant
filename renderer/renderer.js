@@ -15,6 +15,7 @@ const logContainer = document.getElementById('logContainer');
 let prompts = [];
 let selectedPromptId = 'system-default';
 let editingPromptId = null;
+let defaultPromptText = '';
 
 // Agent state
 let agents = [];
@@ -233,6 +234,7 @@ async function loadPrompts() {
   var result = await window.electronAPI.getPrompts();
   prompts = result.prompts || [];
   selectedPromptId = result.selectedId || 'system-default';
+  defaultPromptText = result.defaultPrompt || '';
   renderPrompts();
 }
 
@@ -241,6 +243,9 @@ function renderPrompts() {
   promptsList.innerHTML = '';
 
   // System default prompt (always first, built-in)
+  // Generate preview from actual default_prompt text in config
+  var preview = defaultPromptText ? defaultPromptText.substring(0, 60).replace(/\n/g, ' ') : '(empty)';
+  if (defaultPromptText && defaultPromptText.length > 60) preview += '...';
   var defaultItem = document.createElement('div');
   defaultItem.className = 'prompt-item' + (selectedPromptId === 'system-default' ? ' selected' : '');
   defaultItem.dataset.promptId = 'system-default';
@@ -249,7 +254,7 @@ function renderPrompts() {
     '</div>' +
     '<div class="prompt-item-info">' +
     '  <div class="prompt-item-name">System Default</div>' +
-    '  <div class="prompt-item-preview">Built-in prompt: analyze screenshot and provide smart completion suggestions</div>' +
+    '  <div class="prompt-item-preview">' + (defaultPromptText ? escapeHtml(preview) : '(empty)') + '</div>' +
     '</div>';
   defaultItem.addEventListener('click', async function() {
     await window.electronAPI.selectPrompt('system-default');
