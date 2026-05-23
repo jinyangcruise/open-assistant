@@ -715,6 +715,21 @@ class DoubaoAppAdapter extends BaseAgent {
       }
     };
 
+    // ── Already aborted: don't touch the page at all ──
+    // This prevents:
+    //   1. Stale fetch wrapper from a previous activation intercepting old
+    //      response streams and leaking events into this new capture.
+    //   2. Runtime.enable/disble cycles that create race conditions.
+    //   3. Injecting an interceptor on a cancelled activation, only to
+    //      immediately cleanup — the wrapper would remain on the page and
+    //      its reader could bleed into the next activation.
+    if (signal && signal.aborted) {
+      done = true;
+      debugLog('_captureSSEResponse: signal already aborted, returning empty');
+      resolveCapture(fullText);
+      return capturePromise;
+    }
+
     // Enable Runtime domain for console.debug interception
     debugLog('Runtime.enable + inject fetch interceptor');
     await bridge.send('Runtime.enable');
@@ -818,15 +833,6 @@ return response;
 
     // Abort signal: user cancelled via overlay
     if (signal) {
-      // Handle already-aborted signal (edge case)
-      if (signal.aborted) {
-        done = true;
-        debugLog('SSE capture signal already aborted');
-        await cleanup();
-        resolveCapture(fullText);
-        return capturePromise;
-      }
-
       signal.addEventListener('abort', async () => {
         if (!done) {
           done = true;
@@ -969,6 +975,7 @@ return response;
       debugLog('analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null) + ' hasSignal=' + (signal !== null));
 
       let response;
+      let sentToDoubao = false;
 
       if (mode === 'sse-fetch') {
         // === SSE FETCH MODE ===
@@ -980,32 +987,47 @@ return response;
 
         const ssePromise = this._captureSSEResponse(bridge, userTimeout, onChunk, signal);
 
-        // Click send (trigger the request that SSE capture is waiting for)
-        // CDP Enter is most reliable for textarea-based input
-        debugLog('analyze: sending (sse-fetch mode)...');
-        await page.pressKey('Enter');
-        // Also try clicking the send button as backup
-        await page.evaluate(clickSendScript());
-
-        response = await ssePromise;
+        // If cancelled before send, skip dispatching to Doubao entirely.
+        // _captureSSEResponse already returned empty without touching the page.
+        if (signal && signal.aborted) {
+          debugLog('analyze: cancelled before send, skipping dispatch');
+          response = await ssePromise;
+        } else {
+          // Click send (trigger the request that SSE capture is waiting for)
+          // CDP Enter is most reliable for textarea-based input
+          debugLog('analyze: sending (sse-fetch mode)...');
+          await page.pressKey('Enter');
+          // Also try clicking the send button as backup
+          await page.evaluate(clickSendScript());
+          sentToDoubao = true;
+          response = await ssePromise;
+        }
 
       } else {
         // === DOM POLL MODE ===
-        // CDP Enter is most reliable for textarea-based input
-        debugLog('analyze: sending (dom-poll mode)...');
-        await page.pressKey('Enter');
-        // Also try clicking the send button as backup
-        await page.evaluate(clickSendScript());
+        // If cancelled before send, skip dispatching to Doubao entirely.
+        if (signal && signal.aborted) {
+          debugLog('analyze: cancelled before send, skipping dispatch (dom-poll)');
+          response = '';
+        } else {
+          // CDP Enter is most reliable for textarea-based input
+          debugLog('analyze: sending (dom-poll mode)...');
+          await page.pressKey('Enter');
+          // Also try clicking the send button as backup
+          await page.evaluate(clickSendScript());
+          sentToDoubao = true;
 
-        response = await this._pollDomResponse(
-          page, beforeLastText, userTimeout, onChunk, signal,
-        );
+          response = await this._pollDomResponse(
+            page, beforeLastText, userTimeout, onChunk, signal,
+          );
+        }
       }
 
-      // ── If cancelled: stop the AI generation now that content was sent ──
+      // ── If cancelled AND content was sent: stop the AI generation ──
       // stopGeneration() runs here instead of in the IPC handler because at this
       // point the content has been dispatched and the break button is visible.
-      if (signal && signal.aborted) {
+      // If sentToDoubao is false, nothing was dispatched, so no need to stop.
+      if (signal && signal.aborted && sentToDoubao) {
         debugLog('analyze: signal was aborted, stopping generation...');
         for (let retry = 0; retry < 3; retry++) {
           try {
