@@ -732,16 +732,9 @@ function setupIpcHandlers() {
 
   // Cancel current processing from the overlay's cancel button
   // Also tells Doubao to stop generating via CDP (if adapter supports it)
-  ipcMain.on('cancel-processing', async () => {
-    // 1. Stop Doubao AI generation (click the stop button via CDP)
-    if (currentAdapter && typeof currentAdapter.stopGeneration === 'function') {
-      try {
-        await currentAdapter.stopGeneration();
-      } catch (e) {
-        console.log('[Main] Failed to stop Doubao generation:', e.message);
-      }
-    }
-    // 2. Abort current processing
+  ipcMain.on('cancel-processing', () => {
+    // Abort current processing — analyze() will handle stopping generation
+    // after content has been sent (when the break button is actually visible).
     const controller = currentAbortController;
     if (controller && !controller.signal.aborted) {
       console.log('[Main] User cancelled processing via overlay');

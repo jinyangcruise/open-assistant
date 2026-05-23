@@ -989,10 +989,25 @@ return response;
       // point the content has been dispatched and the break button is visible.
       if (signal && signal.aborted) {
         debugLog('analyze: signal was aborted, stopping generation...');
-        try {
-          await this.stopGeneration();
-        } catch (e) {
-          debugLog('analyze: stopGeneration failed:', e.message);
+        for (let retry = 0; retry < 3; retry++) {
+          try {
+            await this.stopGeneration();
+          } catch (e) {
+            debugLog('analyze: stopGeneration attempt ' + retry + ' failed:', e.message);
+          }
+          // Wait 0.5s then check if generation is still running
+          await new Promise(r => setTimeout(r, 500));
+          const stillRunning = await page.evaluate(`(function() {
+            var btn = document.querySelector('[data-testid="chat_input_local_break_button"]');
+            if (!btn) return false;
+            var r = btn.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          })()`);
+          if (!stillRunning) {
+            debugLog('analyze: generation stopped after attempt ' + retry);
+            break;
+          }
+          debugLog('analyze: generation still running, retry ' + (retry + 1) + '...');
         }
       }
 
