@@ -330,143 +330,6 @@ class DoubaoAppAdapter extends BaseAgent {
     return { success: false };
   }
 
-  /**
-   * Clear any attached screenshot from the file input and image preview.
-   * Called when user cancels before the send button is clicked.
-   * @param {Object} page - CDPPage instance
-   */
-  async _clearScreenshot(page) {
-    debugLog('_clearScreenshot: clearing file input and image preview...');
-    try {
-      // ── Phase 0: Debug dump — log the DOM around chat input area ──
-      const domDump = await page.evaluate(`(function() {
-        var inputArea = document.querySelector('${SEL.INPUT}');
-        if (!inputArea) return 'NO_INPUT_FOUND';
-        var container = inputArea.closest('[class*="input"],[class*="chat"]');
-        if (!container) container = inputArea.parentElement;
-        if (!container) return 'NO_CONTAINER';
-        // Get the container's outer HTML (truncated to 3000 chars)
-        var html = container.outerHTML || container.innerHTML || '';
-        return html.substring(0, 3000);
-      })()`);
-      debugLog('_clearScreenshot: phase0 DOM dump:', domDump);
-
-      // ── Phase 1: Search ENTIRE page for blob: images and preview containers ──
-      // NOTE: The preview image is typically rendered OUTSIDE the textarea's
-      // container (e.g. in a sibling panel above the input). So we search the
-      // whole document, not just the input area's parent.
-      const pageScan = await page.evaluate(`(function() {
-        var results = { blobImgs: [], previewContainers: [], fileInputs: 0 };
-
-        // Find ALL img/video with blob: or data: URLs
-        var allMedia = document.querySelectorAll('img[src*="blob:"], img[src*="data:"], video[src*="blob:"]');
-        for (var i = 0; i < allMedia.length; i++) {
-          results.blobImgs.push({
-            tag: allMedia[i].tagName,
-            srcLen: (allMedia[i].src || '').length,
-            parentCls: ((allMedia[i].parentElement && allMedia[i].parentElement.className) || '').substring(0,50),
-            visible: allMedia[i].offsetParent !== null,
-          });
-        }
-
-        // Find preview containers anywhere
-        var previews = document.querySelectorAll(
-          '[class*="preview"],[class*="upload"],[class*="attachment"],' +
-          '[class*="image"],[class*="media"],[data-testid*="preview"],' +
-          '[data-testid*="upload"],[data-testid*="image"],[data-testid*="file"]'
-        );
-        for (var p = 0; p < Math.min(previews.length, 5); p++) {
-          results.previewContainers.push({
-            tag: previews[p].tagName,
-            cls: (previews[p].className || '').substring(0,60),
-            testid: previews[p].getAttribute('data-testid') || '',
-            visible: previews[p].offsetParent !== null,
-            rect: JSON.stringify(previews[p].getBoundingClientRect()),
-          });
-        }
-
-        results.fileInputs = document.querySelectorAll('input[type="file"]').length;
-        return results;
-      })()`);
-      debugLog('_clearScreenshot: phase1 page scan =', JSON.stringify(pageScan, null, 2));
-
-      // ── Phase 2: JS-level form.reset() to clear file input ──
-      // NOTE: We intentionally do NOT use CDP setFileInputFiles([]) here
-      // because it can corrupt the CDP bridge state and break subsequent
-      // uploads. form.reset() is safe and works at the JS level.
-      await page.evaluate(`(function() {
-        var input = document.querySelector('${FILE_INPUT}');
-        if (!input) return false;
-        var form = document.createElement('form');
-        var parent = input.parentNode;
-        var ref = input.nextSibling;
-        parent.insertBefore(form, input);
-        form.appendChild(input);
-        form.reset();
-        if (ref) parent.insertBefore(input, ref);
-        else parent.appendChild(input);
-        parent.removeChild(form);
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      })()`);
-      await new Promise(r => setTimeout(r, 200));
-
-      // ── Phase 3: Remove ALL blob images and preview containers from entire document ──
-      const removed = await page.evaluate(`(function() {
-        var counts = { imgs: 0, previews: 0 };
-
-        // Remove ALL img/video with blob: or data: URLs (entire document)
-        var media = document.querySelectorAll('img[src*="blob:"], img[src*="data:"], video[src*="blob:"]');
-        for (var i = media.length - 1; i >= 0; i--) {
-          if (media[i].parentElement) {
-            media[i].parentElement.removeChild(media[i]);
-            counts.imgs++;
-          }
-        }
-
-        // Remove ALL preview containers (entire document, not just near input)
-        var previews = document.querySelectorAll(
-          '[class*="preview"],[class*="upload"],[class*="attachment"],' +
-          '[class*="image"],[data-testid*="preview"],[data-testid*="upload"],' +
-          '[data-testid*="image"],[data-testid*="file"]'
-        );
-        for (var j = previews.length - 1; j >= 0; j--) {
-          var tid = previews[j].getAttribute('data-testid') || '';
-          if (tid === 'chat_input_input' || tid === 'chat_input_send_button') continue;
-          if (previews[j].parentElement) {
-            previews[j].parentElement.removeChild(previews[j]);
-            counts.previews++;
-          }
-        }
-
-        return counts;
-      })()`);
-      debugLog('_clearScreenshot: phase3 DOM removal =', JSON.stringify(removed));
-
-      // ── Phase 4: Send Escape key to dismiss any overlay ──
-      try {
-        await page.cdp('Input.dispatchKeyEvent', {
-          type: 'keyDown', windowsVirtualKeyCode: 27, key: 'Escape', code: 'Escape',
-        });
-        await page.cdp('Input.dispatchKeyEvent', {
-          type: 'keyUp', windowsVirtualKeyCode: 27, key: 'Escape', code: 'Escape',
-        });
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, 200));
-
-      // ── Phase 5: Verify — check remaining blob images ──
-      const verify = await page.evaluate(`(function() {
-        return document.querySelectorAll('img[src*="blob:"], img[src*="data:"]').length;
-      })()`);
-      debugLog('_clearScreenshot: phase5 verify remaining blob imgs =', verify);
-
-      debugLog('_clearScreenshot: done');
-    } catch (e) {
-      debugLog('_clearScreenshot: failed:', e.message);
-    }
-  }
-
   // ===================================================================
   //  DOM POLL MODE — asr_btn-based polling (primary capture method)
 
@@ -797,13 +660,13 @@ class DoubaoAppAdapter extends BaseAgent {
         // to avoid duplicates during the transition period.
         const seq = args[2]?.value;
         if (typeof seq !== 'number') return;
-        //debugLog('SSE chunk:', JSON.stringify(text));
+        debugLog('SSE chunk:', JSON.stringify(text));
         fullText += text;
         if (onChunk) onChunk(text);
       } else if (tag === '__SSE_RAW__' && typeof text === 'string') {
-        //debugLog('SSE raw event:', text);
+        debugLog('SSE raw event:', text);
       } else if (tag === '__SSE_EVENT__' && typeof text === 'string') {
-        //debugLog('SSE parsed:', text);
+        debugLog('SSE parsed:', text);
       } else if (tag === '__SSE_DONE__') {
         if (!done) {
           done = true;
@@ -973,9 +836,6 @@ return response;
       // 0. Find and connect to a verified Doubao chat page (positive DOM check)
       page = await this._findOrVerifyChatPage();
 
-      // Reset sent flag at the start of each analyze
-      this._hasSent = false;
-
       // 3. Wake up hidden/minimized renderer before any DOM interaction.
       //    After restart, the page's lazy components (incl. file input) only
       //    render when the page is active. Must bringToFront BEFORE upload.
@@ -1035,14 +895,6 @@ return response;
       const signal = context.signal || null;
       debugLog('analyze: mode=' + mode + ' timeout=' + userTimeout + ' hasOnChunk=' + (onChunk !== null) + ' hasSignal=' + (signal !== null));
 
-      // 9.5. Check if user cancelled before sending (after text injection, before click send)
-      if (signal && signal.aborted) {
-        debugLog('analyze: cancelled before send, clearing input');
-        await page.evaluate(injectTextScript(''));
-        await this._clearScreenshot(page);
-        return { text: '', type: '', timestamp: new Date().toISOString(), agentId: this.id };
-      }
-
       let response;
 
       if (mode === 'sse-fetch') {
@@ -1064,7 +916,6 @@ return response;
         }
 
         // Click send (trigger the request that SSE capture is waiting for)
-        this._hasSent = true;
         const clicked = await page.evaluate(clickSendScript());
         if (!clicked) {
           await page.pressKey('Enter');
@@ -1082,7 +933,6 @@ return response;
           debugLog('bringToFront before send failed:', e.message);
         }
 
-        this._hasSent = true;
         const clicked = await page.evaluate(clickSendScript());
         if (!clicked) {
           await page.pressKey('Enter');
@@ -1126,21 +976,6 @@ return response;
       debugLog('stopGeneration: no CDP page connection available');
       return false;
     }
-
-    // If content hasn't been sent yet, just clear the input instead of trying to stop generation
-    if (!this._hasSent) {
-      debugLog('stopGeneration: content not yet sent, clearing input');
-      try {
-        const { injectTextScript } = await _getOpencliUtils();
-        await this._page.evaluate(injectTextScript(''));
-        await this._clearScreenshot(this._page);
-        return true;
-      } catch (e) {
-        debugLog('stopGeneration: failed to clear input:', e.message);
-        return false;
-      }
-    }
-
     try {
       // ── Attempt 1: Click the stop button ──
       // During generation, Doubao shows a visible div with
