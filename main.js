@@ -215,6 +215,9 @@ function createTray() {
   }
 }
 
+// Built-in default prompt (used for reset functionality)
+const BUILTIN_DEFAULT_PROMPT = '我发送了一张屏幕截图，请分析截图中的内容，并提供智能补全建议。\n\n\n当前应用: {app}\n\n\n要求：\n\n1. 判断我正在做什么（写代码/写文档/其他）\n\n2. 如果是代码，识别编程语言和上下文\n\n3. 根据上下文，提供智能补全建议\n\n4. 只返回补全内容，不要解释\n\n5. 保持代码格式和缩进\n\n6. 根据用户使用的编程语言和工具，使用正确的缩进方式（空格/制表符）\n\n7. 不要重复用户已有的内容，例如用户写的注释\n\n\n请直接分析屏幕截图并返回补全建议：';
+
 // Build or rebuild the tray context menu from current config
 function rebuildTrayMenu() {
   if (!tray) return;
@@ -255,6 +258,37 @@ function rebuildTrayMenu() {
       ]
     },
   ];
+
+  // Prompt submenu — use explicit checkmark prefix instead of type:'radio'
+  // to avoid Electron radio-group rendering quirks
+  var selId = store.get('selected_prompt_id') || 'system-default';
+  var promptSubmenu = [
+    {
+      label: (selId === 'system-default' ? '✓ ' : '  ') + 'System Default',
+      click: function() {
+        store.set('selected_prompt_id', 'system-default');
+        rebuildTrayMenu();
+        notifyConfigUpdated();
+      }
+    }
+  ];
+  var prompts = store.get('prompts') || [];
+  if (prompts.length > 0) {
+    promptSubmenu.push({ type: 'separator' });
+    for (var i = 0; i < prompts.length; i++) {
+      (function(p) {
+        promptSubmenu.push({
+          label: (selId === p.id ? '✓ ' : '  ') + p.name,
+          click: function() {
+            store.set('selected_prompt_id', p.id);
+            rebuildTrayMenu();
+            notifyConfigUpdated();
+          }
+        });
+      })(prompts[i]);
+    }
+  }
+  menuItems.push({ label: 'Prompt', submenu: promptSubmenu });
 
   // Add "Initialize Doubao" if the doubao-app agent is selected
   const selectedIds = AgentRegistry.getSelectedIds();
@@ -452,6 +486,11 @@ async function handleShortcut(agentId) {
       }
     }
 
+    // Replace {app} placeholder with the active window title (works for all prompts)
+    if (customPrompt && activeWindow && activeWindow.title) {
+      customPrompt = customPrompt.replace(/\{app\}/g, activeWindow.title);
+    }
+
     // 4. Analyze with specified AI Agent (with optional streaming)
     const agent = AgentRegistry.getAgent(agentId);
     currentAdapter = agent;
@@ -646,6 +685,8 @@ function setupIpcHandlers() {
     }
     
     store.set('prompts', prompts);
+    rebuildTrayMenu();
+    notifyConfigUpdated();
     return { prompts: prompts, selectedId: store.get('selected_prompt_id') };
   });
 
@@ -660,13 +701,31 @@ function setupIpcHandlers() {
       store.set('selected_prompt_id', 'system-default');
     }
     
+    rebuildTrayMenu();
+    notifyConfigUpdated();
     return { prompts: prompts, selectedId: store.get('selected_prompt_id') };
   });
 
   // Select a prompt
   ipcMain.handle('select-prompt', (event, id) => {
     store.set('selected_prompt_id', id);
+    rebuildTrayMenu();
+    notifyConfigUpdated();
     return { selectedId: id };
+  });
+
+  // Update default prompt text
+  ipcMain.handle('update-default-prompt', (event, text) => {
+    store.set('default_prompt', text);
+    return { success: true, defaultPrompt: text };
+  });
+
+  // Reset default prompt to built-in
+  ipcMain.handle('reset-default-prompt', () => {
+    store.set('default_prompt', BUILTIN_DEFAULT_PROMPT);
+    rebuildTrayMenu();
+    notifyConfigUpdated();
+    return { success: true, defaultPrompt: BUILTIN_DEFAULT_PROMPT };
   });
 
   // --- Agent Management ---

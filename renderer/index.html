@@ -115,8 +115,9 @@
             <textarea id="promptContent" rows="6" placeholder="Enter your prompt text here..."></textarea>
             <span class="help-text">This replaces the system prompt entirely when selected. Write your full instruction to the AI.</span>
           </div>
-          <div class="form-actions">
+          <div class="form-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <button type="button" id="savePromptBtn" class="btn btn-primary">Save</button>
+            <button type="button" id="resetDefaultPromptBtn" class="btn btn-secondary" style="display:none;">恢复为内置默认值</button>
             <button type="button" id="cancelPromptBtn" class="btn btn-secondary">Cancel</button>
           </div>
         </div>

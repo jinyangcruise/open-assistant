@@ -35,6 +35,7 @@ const promptName = document.getElementById('promptName');
 const promptContent = document.getElementById('promptContent');
 const savePromptBtn = document.getElementById('savePromptBtn');
 const cancelPromptBtn = document.getElementById('cancelPromptBtn');
+const resetDefaultPromptBtn = document.getElementById('resetDefaultPromptBtn');
 
 // Initialize
 async function init() {
@@ -48,9 +49,10 @@ async function init() {
   // Setup IPC listeners
   window.electronAPI.onAnalysisResult(handleAnalysisResult);
   window.electronAPI.onError(handleError);
-  window.electronAPI.onConfigUpdated((newConfig) => {
+  window.electronAPI.onConfigUpdated(async (newConfig) => {
     config = newConfig;
     populateForm(config);
+    await loadPrompts();
     addLog('Configuration updated from tray', 'info');
   });
   
@@ -206,8 +208,13 @@ function setupPromptEventListeners() {
   });
 
   editPromptBtn.addEventListener('click', function() {
-    var prompt = prompts.find(function(p) { return p.id === selectedPromptId; });
-    if (prompt) showPromptEditor(prompt);
+    if (selectedPromptId === 'system-default') {
+      // Edit the built-in default prompt
+      showPromptEditor({ id: 'system-default', name: 'System Default', content: defaultPromptText });
+    } else {
+      var prompt = prompts.find(function(p) { return p.id === selectedPromptId; });
+      if (prompt) showPromptEditor(prompt);
+    }
   });
 
   deletePromptBtn.addEventListener('click', async function() {
@@ -227,6 +234,16 @@ function setupPromptEventListeners() {
 
   cancelPromptBtn.addEventListener('click', function() {
     hidePromptEditor();
+  });
+
+  // Reset default prompt to built-in
+  resetDefaultPromptBtn.addEventListener('click', async function() {
+    if (!confirm('确定恢复为内置默认提示词？')) return;
+    var result = await window.electronAPI.resetDefaultPrompt();
+    promptContent.value = result.defaultPrompt;
+    defaultPromptText = result.defaultPrompt;
+    renderPrompts();
+    addLog('默认提示词已恢复为内置值', 'info');
   });
 }
 
@@ -292,20 +309,26 @@ function renderPrompts() {
     promptsList.appendChild(item);
   }
 
-  // Update button states
-  editPromptBtn.disabled = selectedPromptId === 'system-default';
+  // Update button states — Edit is always enabled (works for both system-default and user prompts)
+  editPromptBtn.disabled = false;
   deletePromptBtn.disabled = selectedPromptId === 'system-default' || !prompts.length;
 }
 
 function showPromptEditor(prompt) {
+  // Always reset to enabled first (especially if previous edit was system-default)
+  promptName.disabled = false;
   if (prompt) {
     promptName.value = prompt.name || '';
     promptContent.value = prompt.content || '';
     editingPromptId = prompt.id;
+    // Disable name field for system-default (name is fixed)
+    if (prompt.id === 'system-default') promptName.disabled = true;
+    resetDefaultPromptBtn.style.display = prompt.id === 'system-default' ? 'inline-block' : 'none';
   } else {
     promptName.value = '';
     promptContent.value = '';
     editingPromptId = null;
+    resetDefaultPromptBtn.style.display = 'none';
   }
   promptEditor.style.display = 'block';
 }
@@ -314,7 +337,9 @@ function hidePromptEditor() {
   promptEditor.style.display = 'none';
   promptName.value = '';
   promptContent.value = '';
+  promptName.disabled = false;
   editingPromptId = null;
+  resetDefaultPromptBtn.style.display = 'none';
 }
 
 async function savePrompt() {
@@ -327,6 +352,16 @@ async function savePrompt() {
   }
   if (!content) {
     alert('Please enter prompt content.');
+    return;
+  }
+
+  // Handle system-default editing via updateDefaultPrompt IPC
+  if (editingPromptId === 'system-default') {
+    var result = await window.electronAPI.updateDefaultPrompt(content);
+    defaultPromptText = result.defaultPrompt;
+    hidePromptEditor();
+    renderPrompts();
+    addLog('默认提示词已更新', 'success');
     return;
   }
 

@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   savePrompt: (data) => ipcRenderer.invoke('save-prompt', data),
   deletePrompt: (id) => ipcRenderer.invoke('delete-prompt', id),
   selectPrompt: (id) => ipcRenderer.invoke('select-prompt', id),
+  updateDefaultPrompt: (text) => ipcRenderer.invoke('update-default-prompt', text),
+  resetDefaultPrompt: () => ipcRenderer.invoke('reset-default-prompt'),
 
   // Agent management
   getAgents: () => ipcRenderer.invoke('get-agents'),
