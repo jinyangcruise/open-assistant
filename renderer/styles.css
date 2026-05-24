@@ -354,26 +354,12 @@ footer a:hover {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   margin-bottom: 0.5rem;
-  cursor: pointer;
   transition: all 0.2s;
 }
 
 .prompt-item:hover {
   border-color: var(--primary-color);
   background-color: #f5f3ff;
-}
-
-.prompt-item.selected {
-  border-color: var(--primary-color);
-  background-color: #eef2ff;
-}
-
-.prompt-item-radio {
-  font-size: 1.25rem;
-  color: var(--primary-color);
-  flex-shrink: 0;
-  width: 1.5rem;
-  text-align: center;
 }
 
 .prompt-item-info {
@@ -396,6 +382,40 @@ footer a:hover {
   text-overflow: ellipsis;
 }
 
+.prompt-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.prompt-item-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.4rem;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.prompt-item-btn.edit-btn:hover {
+  color: var(--primary-color);
+  background: #eef2ff;
+  border-color: var(--border-color);
+}
+
+.prompt-item-btn.delete-btn:hover {
+  color: var(--error-color);
+  background: #fef2f2;
+  border-color: var(--border-color);
+}
+
 .prompts-actions {
   display: flex;
   gap: 0.5rem;
@@ -414,31 +434,6 @@ footer a:hover {
 
 .btn-danger:hover:not(:disabled) {
   background-color: #dc2626;
-}
-
-.prompt-editor {
-  background: #f9fafb;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 1rem;
-  margin-top: 0.5rem;
-}
-
-.prompt-editor .form-group textarea {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-family: 'Courier New', monospace;
-  resize: vertical;
-  transition: border-color 0.2s;
-}
-
-.prompt-editor .form-group textarea:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
 /* Agent Management */

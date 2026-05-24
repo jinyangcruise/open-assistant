@@ -21,10 +21,11 @@
             <h2>使用说明</h2>
             <ol>
               <li>在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent</li>
-              <li>为每个 Agent 点击 <strong>录制按钮</strong> 设置快捷键</li>
-              <li>在任何应用中按下 Agent 的快捷键即可触发 AI 分析</li>
+              <li>在每个 Agent 的提示词胶囊中点击 ✏️ 图标设置快捷键</li>
+              <li>通过胶囊右侧的开关 <strong>启用</strong> 该提示词的快捷键</li>
+              <li>在任何应用中按下快捷键即可触发对应 Agent 和提示词的 AI 分析</li>
             </ol>
-            <p class="usage-note">提示：快捷键无需打开本窗口即可生效。</p>
+            <p class="usage-note">提示：快捷键无需打开本窗口即可生效。同一快捷键被多个提示词使用时，仅最先注册的有效。</p>
           </div>
         </div>
       </section>
@@ -101,25 +102,6 @@
 
         <div class="prompts-actions">
           <button id="addPromptBtn" class="btn btn-sm btn-primary">+ Add</button>
-          <button id="editPromptBtn" class="btn btn-sm btn-secondary" disabled>Edit</button>
-          <button id="deletePromptBtn" class="btn btn-sm btn-danger" disabled>Delete</button>
-        </div>
-
-        <div id="promptEditor" class="prompt-editor" style="display:none;">
-          <div class="form-group">
-            <label for="promptName">Prompt Name</label>
-            <input type="text" id="promptName" placeholder="e.g. Code Completion">
-          </div>
-          <div class="form-group">
-            <label for="promptContent">Prompt Content</label>
-            <textarea id="promptContent" rows="6" placeholder="Enter your prompt text here..."></textarea>
-            <span class="help-text">This replaces the system prompt entirely when selected. Write your full instruction to the AI.</span>
-          </div>
-          <div class="form-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-            <button type="button" id="savePromptBtn" class="btn btn-primary">Save</button>
-            <button type="button" id="resetDefaultPromptBtn" class="btn btn-secondary" style="display:none;">恢复为内置默认值</button>
-            <button type="button" id="cancelPromptBtn" class="btn btn-secondary">Cancel</button>
-          </div>
         </div>
       </section>
 
@@ -166,6 +148,39 @@
       <div class="recorder-actions">
         <button id="recorderConfirm" class="btn btn-primary" disabled>确认</button>
         <button id="recorderCancel" class="btn btn-secondary">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prompt Editor Modal -->
+  <div id="promptEditorOverlay" class="recorder-overlay" style="display:none">
+    <div class="recorder-modal" style="min-width:500px;max-width:600px;">
+      <h3 id="promptEditorTitle">编辑提示词</h3>
+      <div class="form-group" style="text-align:left;margin-top:1rem;">
+        <label for="modalPromptName">Prompt Name</label>
+        <input type="text" id="modalPromptName" placeholder="e.g. Code Completion">
+      </div>
+      <div class="form-group" style="text-align:left;">
+        <label for="modalPromptContent">Prompt Content</label>
+        <textarea id="modalPromptContent" rows="8" placeholder="Enter your prompt text here..." style="width:100%;padding:0.75rem;border:1px solid var(--border-color);border-radius:6px;font-size:0.9rem;font-family:'Courier New',monospace;resize:vertical;box-sizing:border-box;"></textarea>
+        <span class="help-text">该提示词将作为完整指令发送给 AI，请编写明确、完整的提示内容。</span>
+      </div>
+      <div class="form-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;margin-top:1rem;">
+        <button id="modalSavePromptBtn" class="btn btn-primary">Save</button>
+        <button id="modalResetDefaultPromptBtn" class="btn btn-secondary" style="display:none;">恢复为内置默认值</button>
+        <button id="modalCancelPromptBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Dialog Modal -->
+  <div id="confirmDialogOverlay" class="recorder-overlay" style="display:none">
+    <div class="recorder-modal" style="min-width:360px;">
+      <h3 id="confirmDialogTitle">确认</h3>
+      <p id="confirmDialogMessage" style="margin:1rem 0;color:var(--text-secondary);"></p>
+      <div class="recorder-actions">
+        <button id="confirmDialogOk" class="btn btn-primary">确认</button>
+        <button id="confirmDialogCancel" class="btn btn-secondary">取消</button>
       </div>
     </div>
   </div>

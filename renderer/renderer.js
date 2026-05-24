@@ -29,14 +29,22 @@ let recorderShortcut = null;
 // Prompt DOM Elements
 const promptsList = document.getElementById('promptsList');
 const addPromptBtn = document.getElementById('addPromptBtn');
-const editPromptBtn = document.getElementById('editPromptBtn');
-const deletePromptBtn = document.getElementById('deletePromptBtn');
-const promptEditor = document.getElementById('promptEditor');
-const promptName = document.getElementById('promptName');
-const promptContent = document.getElementById('promptContent');
-const savePromptBtn = document.getElementById('savePromptBtn');
-const cancelPromptBtn = document.getElementById('cancelPromptBtn');
-const resetDefaultPromptBtn = document.getElementById('resetDefaultPromptBtn');
+
+// Prompt Editor Modal Elements
+const promptEditorOverlay = document.getElementById('promptEditorOverlay');
+const promptEditorTitle = document.getElementById('promptEditorTitle');
+const modalPromptName = document.getElementById('modalPromptName');
+const modalPromptContent = document.getElementById('modalPromptContent');
+const modalSavePromptBtn = document.getElementById('modalSavePromptBtn');
+const modalCancelPromptBtn = document.getElementById('modalCancelPromptBtn');
+const modalResetDefaultPromptBtn = document.getElementById('modalResetDefaultPromptBtn');
+
+// Confirm Dialog Modal Elements
+const confirmDialogOverlay = document.getElementById('confirmDialogOverlay');
+const confirmDialogTitle = document.getElementById('confirmDialogTitle');
+const confirmDialogMessage = document.getElementById('confirmDialogMessage');
+const confirmDialogOk = document.getElementById('confirmDialogOk');
+const confirmDialogCancel = document.getElementById('confirmDialogCancel');
 
 // Initialize
 async function init() {
@@ -71,27 +79,52 @@ function setupEventListeners() {
       await saveConfig();
     });
   }
-  
+
   // Reset button
   resetBtn.addEventListener('click', async () => {
-    if (confirm('Reset all settings to defaults?')) {
-      config = await window.electronAPI.getConfig();
-      populateForm(config);
-      addLog('Settings reset to defaults', 'info');
-    }
+    var confirmed = await showConfirmDialog('重置设置', '确定要恢复所有设置为默认值吗？');
+    if (!confirmed) return;
+    config = await window.electronAPI.getConfig();
+    populateForm(config);
+    addLog('Settings reset to defaults', 'info');
   });
-  
+
   // Prompt management
   setupPromptEventListeners();
-  
+
   // Agent management
   setupAgentEventListeners();
-  
+
   // Shortcut recorder modal events
   document.getElementById('recorderConfirm').addEventListener('click', confirmShortcut);
   document.getElementById('recorderCancel').addEventListener('click', cancelShortcut);
   document.getElementById('shortcutRecorderOverlay').addEventListener('click', function(e) {
     if (e.target === this) cancelShortcut();
+  });
+
+  // Prompt editor modal events
+  modalSavePromptBtn.addEventListener('click', async function() {
+    await savePrompt();
+  });
+  modalCancelPromptBtn.addEventListener('click', hidePromptEditor);
+  promptEditorOverlay.addEventListener('click', function(e) {
+    if (e.target === this) hidePromptEditor();
+  });
+  modalResetDefaultPromptBtn.addEventListener('click', async function() {
+    var confirmed = await showConfirmDialog('恢复默认', '确定恢复为内置默认提示词？');
+    if (!confirmed) return;
+    var result = await window.electronAPI.resetDefaultPrompt();
+    modalPromptContent.value = result.defaultPrompt;
+    defaultPromptText = result.defaultPrompt;
+    renderPrompts();
+    addLog('默认提示词已恢复为内置值', 'info');
+  });
+
+  // Confirm dialog modal events
+  confirmDialogOk.addEventListener('click', confirmDialogResolve);
+  confirmDialogCancel.addEventListener('click', confirmDialogReject);
+  confirmDialogOverlay.addEventListener('click', function(e) {
+    if (e.target === this) confirmDialogReject();
   });
 }
 
@@ -204,45 +237,6 @@ function setupPromptEventListeners() {
   addPromptBtn.addEventListener('click', function() {
     showPromptEditor(null);
   });
-
-  editPromptBtn.addEventListener('click', function() {
-    if (selectedPromptId === 'system-default') {
-      // Edit the built-in default prompt
-      showPromptEditor({ id: 'system-default', name: 'System Default', content: defaultPromptText });
-    } else {
-      var prompt = prompts.find(function(p) { return p.id === selectedPromptId; });
-      if (prompt) showPromptEditor(prompt);
-    }
-  });
-
-  deletePromptBtn.addEventListener('click', async function() {
-    var prompt = prompts.find(function(p) { return p.id === selectedPromptId; });
-    if (!prompt) return;
-    if (!confirm('Delete prompt "' + prompt.name + '"?')) return;
-    var result = await window.electronAPI.deletePrompt(prompt.id);
-    prompts = result.prompts;
-    selectedPromptId = result.selectedId;
-    renderPrompts();
-    addLog('Deleted prompt: ' + prompt.name, 'info');
-  });
-
-  savePromptBtn.addEventListener('click', async function() {
-    await savePrompt();
-  });
-
-  cancelPromptBtn.addEventListener('click', function() {
-    hidePromptEditor();
-  });
-
-  // Reset default prompt to built-in
-  resetDefaultPromptBtn.addEventListener('click', async function() {
-    if (!confirm('确定恢复为内置默认提示词？')) return;
-    var result = await window.electronAPI.resetDefaultPrompt();
-    promptContent.value = result.defaultPrompt;
-    defaultPromptText = result.defaultPrompt;
-    renderPrompts();
-    addLog('默认提示词已恢复为内置值', 'info');
-  });
 }
 
 async function loadPrompts() {
@@ -260,25 +254,26 @@ function renderPrompts() {
   promptsList.innerHTML = '';
 
   // System default prompt (always first, built-in)
-  // Generate preview from actual default_prompt text in config
   var preview = defaultPromptText ? defaultPromptText.substring(0, 60).replace(/\n/g, ' ') : '(empty)';
   if (defaultPromptText && defaultPromptText.length > 60) preview += '...';
   var defaultItem = document.createElement('div');
-  defaultItem.className = 'prompt-item' + (selectedPromptId === 'system-default' ? ' selected' : '');
-  defaultItem.dataset.promptId = 'system-default';
-  defaultItem.innerHTML = '<div class="prompt-item-radio">' +
-    (selectedPromptId === 'system-default' ? '&#9679;' : '&#9675;') +
-    '</div>' +
+  defaultItem.className = 'prompt-item';
+  defaultItem.innerHTML =
     '<div class="prompt-item-info">' +
     '  <div class="prompt-item-name">System Default</div>' +
     '  <div class="prompt-item-preview">' + (defaultPromptText ? escapeHtml(preview) : '(empty)') + '</div>' +
+    '</div>' +
+    '<div class="prompt-item-actions">' +
+    '  <button class="prompt-item-btn edit-btn" title="编辑提示词">✏️</button>' +
     '</div>';
-  defaultItem.addEventListener('click', async function() {
-    await window.electronAPI.selectPrompt('system-default');
-    selectedPromptId = 'system-default';
-    renderPrompts();
-    addLog('Selected prompt for editing: System Default', 'info');
+
+  // Edit System Default
+  var editDefaultBtn = defaultItem.querySelector('.edit-btn');
+  editDefaultBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    showPromptEditor({ id: 'system-default', name: 'System Default', content: defaultPromptText });
   });
+
   promptsList.appendChild(defaultItem);
 
   // User-defined prompts
@@ -286,72 +281,88 @@ function renderPrompts() {
     var p = prompts[i];
     var preview = p.content ? p.content.substring(0, 60).replace(/\n/g, ' ') : '(empty)';
     if (p.content && p.content.length > 60) preview += '...';
-    
+
     var item = document.createElement('div');
-    item.className = 'prompt-item' + (selectedPromptId === p.id ? ' selected' : '');
-    item.dataset.promptId = p.id;
-    item.innerHTML = '<div class="prompt-item-radio">' +
-      (selectedPromptId === p.id ? '&#9679;' : '&#9675;') +
-      '</div>' +
+    item.className = 'prompt-item';
+    item.innerHTML =
       '<div class="prompt-item-info">' +
       '  <div class="prompt-item-name">' + escapeHtml(p.name) + '</div>' +
       '  <div class="prompt-item-preview">' + escapeHtml(preview) + '</div>' +
+      '</div>' +
+      '<div class="prompt-item-actions">' +
+      '  <button class="prompt-item-btn edit-btn" title="编辑提示词">✏️</button>' +
+      '  <button class="prompt-item-btn delete-btn" title="删除提示词">🗑️</button>' +
       '</div>';
-    item.addEventListener('click', (function(pid) {
-      return async function() {
-        await window.electronAPI.selectPrompt(pid);
-        selectedPromptId = pid;
-        renderPrompts();
-        var found = prompts.find(function(p) { return p.id === pid; });
-        addLog('Selected prompt for editing: ' + (found ? found.name : pid), 'info');
-      };
-    })(p.id));
+
+    // Edit button
+    var editBtn = item.querySelector('.edit-btn');
+    editBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      showPromptEditor(p);
+    });
+
+    // Delete button
+    var deleteBtn = item.querySelector('.delete-btn');
+    deleteBtn.addEventListener('click', async function(e) {
+      e.stopPropagation();
+      var confirmed = await showConfirmDialog('删除提示词', '确定要删除提示词 "' + p.name + '" 吗？');
+      if (!confirmed) return;
+      var result = await window.electronAPI.deletePrompt(p.id);
+      prompts = result.prompts;
+      selectedPromptId = result.selectedId;
+      renderPrompts();
+      addLog('Deleted prompt: ' + p.name, 'info');
+    });
+
     promptsList.appendChild(item);
   }
-
-  // Update button states — Edit is always enabled (works for both system-default and user prompts)
-  editPromptBtn.disabled = false;
-  deletePromptBtn.disabled = selectedPromptId === 'system-default' || !prompts.length;
 }
 
 function showPromptEditor(prompt) {
-  // Always reset to enabled first (especially if previous edit was system-default)
-  promptName.disabled = false;
+  modalPromptName.disabled = false;
   if (prompt) {
-    promptName.value = prompt.name || '';
-    promptContent.value = prompt.content || '';
+    promptEditorTitle.textContent = prompt.id === 'system-default' ? '编辑默认提示词' : '编辑提示词';
+    modalPromptName.value = prompt.name || '';
+    modalPromptContent.value = prompt.content || '';
     editingPromptId = prompt.id;
     // Disable name field for system-default (name is fixed)
-    if (prompt.id === 'system-default') promptName.disabled = true;
-    resetDefaultPromptBtn.style.display = prompt.id === 'system-default' ? 'inline-block' : 'none';
+    if (prompt.id === 'system-default') modalPromptName.disabled = true;
+    modalResetDefaultPromptBtn.style.display = prompt.id === 'system-default' ? 'inline-block' : 'none';
   } else {
-    promptName.value = '';
-    promptContent.value = '';
+    promptEditorTitle.textContent = '新建提示词';
+    modalPromptName.value = '';
+    modalPromptContent.value = '';
     editingPromptId = null;
-    resetDefaultPromptBtn.style.display = 'none';
+    modalResetDefaultPromptBtn.style.display = 'none';
   }
-  promptEditor.style.display = 'block';
+  promptEditorOverlay.style.display = 'flex';
+  modalPromptName.focus();
 }
 
 function hidePromptEditor() {
-  promptEditor.style.display = 'none';
-  promptName.value = '';
-  promptContent.value = '';
-  promptName.disabled = false;
+  promptEditorOverlay.style.display = 'none';
+  modalPromptName.value = '';
+  modalPromptContent.value = '';
+  modalPromptName.disabled = false;
   editingPromptId = null;
-  resetDefaultPromptBtn.style.display = 'none';
+  modalResetDefaultPromptBtn.style.display = 'none';
 }
 
 async function savePrompt() {
-  var name = promptName.value.trim();
-  var content = promptContent.value.trim();
-  
+  var name = modalPromptName.value.trim();
+  var content = modalPromptContent.value.trim();
+
   if (!name) {
-    alert('Please enter a prompt name.');
+    // Use a subtle visual cue instead of alert
+    modalPromptName.style.borderColor = 'var(--error-color)';
+    modalPromptName.focus();
+    setTimeout(function() { modalPromptName.style.borderColor = ''; }, 2000);
     return;
   }
   if (!content) {
-    alert('Please enter prompt content.');
+    modalPromptContent.style.borderColor = 'var(--error-color)';
+    modalPromptContent.focus();
+    setTimeout(function() { modalPromptContent.style.borderColor = ''; }, 2000);
     return;
   }
 
@@ -375,8 +386,37 @@ async function savePrompt() {
   prompts = result.prompts;
   hidePromptEditor();
   renderPrompts();
-  
+
   addLog('Prompt saved: ' + name, 'success');
+}
+
+// ===== Confirm Dialog =====
+
+var _confirmResolve = null;
+
+function showConfirmDialog(title, message) {
+  return new Promise(function(resolve) {
+    _confirmResolve = resolve;
+    confirmDialogTitle.textContent = title;
+    confirmDialogMessage.textContent = message;
+    confirmDialogOverlay.style.display = 'flex';
+  });
+}
+
+function confirmDialogResolve() {
+  confirmDialogOverlay.style.display = 'none';
+  if (_confirmResolve) {
+    _confirmResolve(true);
+    _confirmResolve = null;
+  }
+}
+
+function confirmDialogReject() {
+  confirmDialogOverlay.style.display = 'none';
+  if (_confirmResolve) {
+    _confirmResolve(false);
+    _confirmResolve = null;
+  }
 }
 
 // ===== Agent Management =====
