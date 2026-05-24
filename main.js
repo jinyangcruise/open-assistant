@@ -8,7 +8,7 @@
  * - Core workflow: screenshot -> analyze -> insert
  */
 
-const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, clipboard, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, clipboard, nativeImage, screen, shell } = require('electron');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const Store = require('electron-store');
@@ -53,6 +53,8 @@ function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
+    minWidth: 600,
+    minHeight: 400,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -867,6 +869,11 @@ function setupIpcHandlers() {
     }
   });
 
+  // Open external link in default browser
+  ipcMain.handle('open-external', (event, url) => {
+    shell.openExternal(url);
+  });
+
 }
 
 // App lifecycle
@@ -880,7 +887,10 @@ app.whenReady().then(() => {
   
   // Setup IPC handlers FIRST
   setupIpcHandlers();
-  
+
+  // Remove default menu bar (Edit, View, Window, Help)
+  Menu.setApplicationMenu(null);
+
   // Then create UI
   createMainWindow();
   createOverlayWindow();

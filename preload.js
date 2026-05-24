@@ -48,5 +48,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (event, newConfig) => callback(newConfig);
     ipcRenderer.on('config-updated', handler);
     return () => ipcRenderer.removeListener('config-updated', handler);
+  },
+
+  // Utilities
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+});
+
+// Suppress link navigation inside the Electron window
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a');
+  if (link && link.href && (link.href.startsWith('http://') || link.href.startsWith('https://'))) {
+    e.preventDefault();
+    ipcRenderer.invoke('open-external', link.href);
   }
 });
