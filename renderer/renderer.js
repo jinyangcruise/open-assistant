@@ -556,13 +556,16 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
       ? '<span class="capsule-shortcut-text">' + escapeHtml(shortcut.replace('Control', 'Ctrl')) + '</span>'
       : '<span class="capsule-shortcut-unset">未设置</span>';
 
+    var clearBtnHtml = shortcut
+      ? '<button class="capsule-clear-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="清除快捷键">✕</button>'
+      : '';
+
     capsule.innerHTML =
-      '<div class="prompt-capsule-info">' +
-      '  <div class="prompt-capsule-name">' + escapeHtml(promptName) + '</div>' +
-      '  <div class="prompt-capsule-shortcut">' +
+      '<div class="prompt-capsule-name" title="' + escapeHtml(promptName) + '">' + escapeHtml(promptName) + '</div>' +
+      '<div class="prompt-capsule-shortcut">' +
             shortcutDisplay +
       '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="设置快捷键">✏️</button>' +
-      '  </div>' +
+            clearBtnHtml +
       '</div>' +
       '<button class="prompt-capsule-toggle" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '">' +
       '  <div class="toggle-track' + (enabled ? ' active' : '') + '">' +
@@ -576,6 +579,17 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
       e.stopPropagation();
       showShortcutRecorder(agent.id, promptId);
     });
+
+    // Clear button: clear shortcut
+    var clearBtn = capsule.querySelector('.capsule-clear-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        await window.electronAPI.savePromptShortcut(agent.id, promptId, '');
+        addLog('Shortcut cleared for ' + agent.name + ' / ' + promptName, 'info');
+        await loadAgents();
+      });
+    }
 
     // Toggle button: enable/disable this prompt shortcut
     var toggleBtn = capsule.querySelector('.prompt-capsule-toggle');

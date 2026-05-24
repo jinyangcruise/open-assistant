@@ -761,16 +761,10 @@ footer a:hover {
   background: #f0f0ff;
 }
 
-.prompt-capsule-info {
-  flex: 1;
-  min-width: 0;
-  padding: 0.35rem 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
 .prompt-capsule-name {
+  flex: 0 0 38%;
+  min-width: 0;
+  padding: 0.35rem 0 0.35rem 0.5rem;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--text-color);
@@ -780,10 +774,12 @@ footer a:hover {
 }
 
 .prompt-capsule-shortcut {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.3rem;
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  min-height: 1.2rem;
 }
 
 .capsule-shortcut-text {
@@ -794,12 +790,14 @@ footer a:hover {
   padding: 0.08rem 0.35rem;
   border-radius: 3px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .capsule-shortcut-unset {
   font-size: 0.7rem;
   color: var(--text-secondary);
   font-style: italic;
+  white-space: nowrap;
 }
 
 .capsule-edit-btn {
@@ -815,11 +813,35 @@ footer a:hover {
   border-radius: 3px;
   line-height: 1;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
 
 .capsule-edit-btn:hover {
   color: var(--primary-color);
   background: #eef2ff;
+}
+
+.capsule-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.65rem;
+  padding: 0.1rem 0.2rem;
+  color: var(--text-secondary);
+  border-radius: 3px;
+  line-height: 1;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.capsule-clear-btn:hover {
+  color: var(--error-color);
+  background: #fef2f2;
+  opacity: 1;
 }
 
 /* Toggle Switch */
