@@ -726,6 +726,157 @@ footer a:hover {
   min-width: 100px;
 }
 
+/* ===== Prompt Capsules ===== */
+.agent-prompts-section {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.agent-prompts-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+}
+
+.prompt-capsule {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: #f8f9fb;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 0.3rem;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.prompt-capsule:hover {
+  border-color: #cbd5e1;
+}
+
+.prompt-capsule.active {
+  border-color: var(--primary-color);
+  background: #f0f0ff;
+}
+
+.prompt-capsule-info {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.prompt-capsule-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-capsule-shortcut {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.2rem;
+}
+
+.capsule-shortcut-text {
+  font-size: 0.72rem;
+  font-family: 'Courier New', monospace;
+  color: var(--primary-color);
+  background: #eef2ff;
+  padding: 0.08rem 0.35rem;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.capsule-shortcut-unset {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.capsule-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.2rem;
+  color: var(--text-secondary);
+  border-radius: 3px;
+  line-height: 1;
+  transition: all 0.15s;
+}
+
+.capsule-edit-btn:hover {
+  color: var(--primary-color);
+  background: #eef2ff;
+}
+
+/* Toggle Switch */
+.prompt-capsule-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.prompt-capsule-toggle:hover {
+  background: #f1f5f9;
+}
+
+.prompt-capsule.active .prompt-capsule-toggle {
+  border-left-color: var(--primary-color);
+}
+
+.toggle-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 10px;
+  background: #d1d5db;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-track.active {
+  background: var(--primary-color);
+}
+
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s;
+}
+
+.toggle-track.active .toggle-knob {
+  transform: translateX(12px);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .container {

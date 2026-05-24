@@ -23,6 +23,7 @@ let selectedAgentIds = [];
 
 // Shortcut recorder state
 let recorderAgentId = null;
+let recorderPromptId = null;
 let recorderShortcut = null;
 
 // Prompt DOM Elements
@@ -58,10 +59,7 @@ async function init() {
   
   // Load prompt management
   await loadPrompts();
-  
-  // Load agents
-  await loadAgents();
-  
+
   addLog('Application initialized', 'info');
 }
 
@@ -253,6 +251,8 @@ async function loadPrompts() {
   selectedPromptId = result.selectedId || 'system-default';
   defaultPromptText = result.defaultPrompt || '';
   renderPrompts();
+  // Re-render agent prompt capsules with updated prompt list
+  await loadAgents();
 }
 
 function renderPrompts() {
@@ -277,7 +277,7 @@ function renderPrompts() {
     await window.electronAPI.selectPrompt('system-default');
     selectedPromptId = 'system-default';
     renderPrompts();
-    addLog('Selected prompt: System Default', 'info');
+    addLog('Selected prompt for editing: System Default', 'info');
   });
   promptsList.appendChild(defaultItem);
 
@@ -303,7 +303,7 @@ function renderPrompts() {
         selectedPromptId = pid;
         renderPrompts();
         var found = prompts.find(function(p) { return p.id === pid; });
-        addLog('Selected prompt: ' + (found ? found.name : pid), 'info');
+        addLog('Selected prompt for editing: ' + (found ? found.name : pid), 'info');
       };
     })(p.id));
     promptsList.appendChild(item);
@@ -401,6 +401,30 @@ async function loadAgents() {
     agents = result.agents || [];
     selectedAgentIds = result.selectedIds || [];
     renderAgents();
+
+    // Auto-detect install path for agents with empty install path
+    for (var i = 0; i < agents.length; i++) {
+      var a = agents[i];
+      if (!a.installPath) {
+        try {
+          var detectResult = await window.electronAPI.detectInstallPath(a.id);
+          if (detectResult && detectResult.path) {
+            await window.electronAPI.updateAgentConfig(a.id, { install_path: detectResult.path });
+            addLog('Auto-detected install path for ' + a.name + ': ' + detectResult.path, 'info');
+          }
+        } catch (detectError) {
+          // Silently ignore detection failures
+          console.log('Install path detection failed for', a.id, detectError.message);
+        }
+      }
+    }
+
+    // Re-render if any paths were updated
+    if (agents.some(function(a) { return !a.installPath; })) {
+      var updatedResult = await window.electronAPI.getAgents();
+      agents = updatedResult.agents || [];
+      renderAgents();
+    }
   } catch (error) {
     addLog('Failed to load agents: ' + error.message, 'error');
   }
@@ -417,14 +441,13 @@ function renderAgents() {
   for (var i = 0; i < agents.length; i++) {
     var a = agents[i];
     var isSelected = selectedAgentIds.includes(a.id);
-    var shortcut = a.shortcut || '';
+    var promptShortcuts = a.promptShortcuts || {};
 
     var item = document.createElement('div');
     item.className = 'agent-item' + (isSelected ? ' selected' : '');
     item.dataset.agentId = a.id;
 
     var typeLabel = a.type === 'electron' ? 'Desktop' : 'Web';
-    var shortcutLabel = shortcut ? shortcut.replace('Control', 'Ctrl') : '未设置';
 
     item.innerHTML =
       '<div class="agent-item-checkbox">' +
@@ -449,19 +472,17 @@ function renderAgents() {
       '      value="' + escapeHtml(a.installPath || '') + '" ' +
       '      placeholder="Leave empty for auto-detect" />' +
       '  </div>' +
-      '  <div class="agent-shortcut-row">' +
-      '    <label class="shortcut-label">Shortcut:</label>' +
-      '    <div class="shortcut-input-wrapper">' +
-      '      <span class="shortcut-display" id="shortcut-display-' + a.id + '">' + escapeHtml(shortcutLabel) + '</span>' +
+      '  <div class="agent-prompts-section">' +
+      '    <div class="agent-prompts-title">Prompts</div>' +
+      '    <div class="agent-prompts-list" id="prompts-list-' + a.id + '">' +
       '    </div>' +
-      '    <button class="btn btn-xs btn-secondary record-btn" data-agent-id="' + a.id + '">' +
-      (shortcut ? '修改' : '录制') +
-      '    </button>' +
-      (shortcut ? '<button class="btn btn-xs btn-ghost clear-btn" data-agent-id="' + a.id + '" title="清除快捷键">清空</button>' : '') +
       '  </div>' +
       '</div>';
 
     agentsList.appendChild(item);
+
+    // Render prompt capsules for this agent
+    renderAgentPromptCapsules(a, promptShortcuts, item);
 
     // Checkbox toggle via change event (the actual checkbox input)
     var checkbox = item.querySelector('.agent-checkbox');
@@ -503,32 +524,6 @@ function renderAgents() {
     })(a.id, item.querySelector('.agent-endpoint-input'));
   }
 
-  // Attach record button handlers
-  var recordBtns = agentsList.querySelectorAll('.record-btn');
-  for (var j = 0; j < recordBtns.length; j++) {
-    (function(btn) {
-      btn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        var agentId = btn.dataset.agentId;
-        showShortcutRecorder(agentId);
-      });
-    })(recordBtns[j]);
-  }
-
-  // Attach clear button handlers
-  var clearBtns = agentsList.querySelectorAll('.clear-btn');
-  for (var l = 0; l < clearBtns.length; l++) {
-    (function(btn) {
-      btn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        var agentId = btn.dataset.agentId;
-        await window.electronAPI.updateAgentConfig(agentId, { shortcut: '' });
-        addLog('Shortcut cleared for ' + agentId, 'info');
-        await loadAgents();
-      });
-    })(clearBtns[l]);
-  }
-
   // Attach test button handlers
   var testBtns = agentsList.querySelectorAll('.test-btn');
   for (var k = 0; k < testBtns.length; k++) {
@@ -539,6 +534,70 @@ function renderAgents() {
         await testAgentConnection(agentId);
       });
     })(testBtns[k]);
+  }
+}
+
+function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
+  var listEl = agentItem.querySelector('.agent-prompts-list');
+  if (!listEl) return;
+
+  listEl.innerHTML = '';
+
+  // Helper to render a capsule for a prompt
+  function createCapsule(promptId, promptName) {
+    var ps = promptShortcuts[promptId] || {};
+    var shortcut = (ps.shortcut || '').trim();
+    var enabled = !!ps.enabled;
+
+    var capsule = document.createElement('div');
+    capsule.className = 'prompt-capsule' + (enabled ? ' active' : '');
+
+    var shortcutDisplay = shortcut
+      ? '<span class="capsule-shortcut-text">' + escapeHtml(shortcut.replace('Control', 'Ctrl')) + '</span>'
+      : '<span class="capsule-shortcut-unset">未设置</span>';
+
+    capsule.innerHTML =
+      '<div class="prompt-capsule-info">' +
+      '  <div class="prompt-capsule-name">' + escapeHtml(promptName) + '</div>' +
+      '  <div class="prompt-capsule-shortcut">' +
+            shortcutDisplay +
+      '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="设置快捷键">✏️</button>' +
+      '  </div>' +
+      '</div>' +
+      '<button class="prompt-capsule-toggle" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '">' +
+      '  <div class="toggle-track' + (enabled ? ' active' : '') + '">' +
+      '    <div class="toggle-knob"></div>' +
+      '  </div>' +
+      '</button>';
+
+    // Edit button: open shortcut recorder
+    var editBtn = capsule.querySelector('.capsule-edit-btn');
+    editBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      showShortcutRecorder(agent.id, promptId);
+    });
+
+    // Toggle button: enable/disable this prompt shortcut
+    var toggleBtn = capsule.querySelector('.prompt-capsule-toggle');
+    toggleBtn.addEventListener('click', async function(e) {
+      e.stopPropagation();
+      var newEnabled = !enabled;
+      await window.electronAPI.setPromptEnabled(agent.id, promptId, newEnabled);
+      addLog((newEnabled ? 'Enabled' : 'Disabled') + ' prompt: ' + promptName + ' for ' + agent.name, 'info');
+      // Reload agents to reflect changes
+      await loadAgents();
+    });
+
+    return capsule;
+  }
+
+  // System Default prompt (always first)
+  listEl.appendChild(createCapsule('system-default', 'System Default'));
+
+  // User-defined prompts
+  for (var j = 0; j < prompts.length; j++) {
+    var p = prompts[j];
+    listEl.appendChild(createCapsule(p.id, p.name));
   }
 }
 
@@ -646,8 +705,9 @@ function parseKeyEvent(e) {
   return parts.join('+');
 }
 
-function showShortcutRecorder(agentId) {
+function showShortcutRecorder(agentId, promptId) {
   recorderAgentId = agentId;
+  recorderPromptId = promptId;
   recorderShortcut = null;
 
   var overlay = document.getElementById('shortcutRecorderOverlay');
@@ -712,6 +772,7 @@ function hideShortcutRecorder() {
     recorderKeyHandler = null;
   }
   recorderAgentId = null;
+  recorderPromptId = null;
   recorderShortcut = null;
   document.getElementById('shortcutRecorderOverlay').style.display = 'none';
   // Resume global shortcuts that were suspended during recording
@@ -719,7 +780,7 @@ function hideShortcutRecorder() {
 }
 
 async function confirmShortcut() {
-  if (!recorderAgentId || !recorderShortcut) return;
+  if (!recorderAgentId || !recorderPromptId || !recorderShortcut) return;
 
   var confirmBtn = document.getElementById('recorderConfirm');
   var status = document.getElementById('recorderStatus');
@@ -727,10 +788,10 @@ async function confirmShortcut() {
   status.textContent = '保存中...';
   status.className = 'recorder-status';
 
-  var result = await window.electronAPI.updateAgentConfig(recorderAgentId, { shortcut: recorderShortcut });
+  var result = await window.electronAPI.savePromptShortcut(recorderAgentId, recorderPromptId, recorderShortcut);
 
   if (result.success) {
-    addLog('Shortcut saved for ' + recorderAgentId + ': ' + recorderShortcut, 'success');
+    addLog('Shortcut saved for ' + recorderAgentId + '/' + recorderPromptId + ': ' + recorderShortcut, 'success');
     hideShortcutRecorder();
     // Reload agents to update display
     await loadAgents();

@@ -120,7 +120,7 @@ class AgentRegistry {
 
   /**
    * Get a list of all registered agents (metadata only, not full instances).
-   * @returns {Array<{id: string, name: string, type: string, endpoint: string, enabled: boolean, installPath: string, shortcut: string, selected: boolean}>}
+   * @returns {Array<{id: string, name: string, type: string, endpoint: string, enabled: boolean, installPath: string, shortcut: string, selected: boolean, promptShortcuts: Object}>}
    */
   static getAll() {
     return Array.from(agents.values()).map((a) => ({
@@ -131,6 +131,7 @@ class AgentRegistry {
       enabled: a.enabled,
       installPath: a.installPath,
       shortcut: store ? store.get(`agents.${a.id}.shortcut`) || '' : '',
+      promptShortcuts: store ? store.get(`agents.${a.id}.promptShortcuts`) || {} : {},
       selected: selectedAgentIds.includes(a.id),
     }));
   }

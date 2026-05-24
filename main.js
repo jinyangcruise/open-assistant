@@ -259,37 +259,6 @@ function rebuildTrayMenu() {
     },
   ];
 
-  // Prompt submenu — use explicit checkmark prefix instead of type:'radio'
-  // to avoid Electron radio-group rendering quirks
-  var selId = store.get('selected_prompt_id') || 'system-default';
-  var promptSubmenu = [
-    {
-      label: (selId === 'system-default' ? '✓ ' : '  ') + 'System Default',
-      click: function() {
-        store.set('selected_prompt_id', 'system-default');
-        rebuildTrayMenu();
-        notifyConfigUpdated();
-      }
-    }
-  ];
-  var prompts = store.get('prompts') || [];
-  if (prompts.length > 0) {
-    promptSubmenu.push({ type: 'separator' });
-    for (var i = 0; i < prompts.length; i++) {
-      (function(p) {
-        promptSubmenu.push({
-          label: (selId === p.id ? '✓ ' : '  ') + p.name,
-          click: function() {
-            store.set('selected_prompt_id', p.id);
-            rebuildTrayMenu();
-            notifyConfigUpdated();
-          }
-        });
-      })(prompts[i]);
-    }
-  }
-  menuItems.push({ label: 'Prompt', submenu: promptSubmenu });
-
   // Add "Initialize Doubao" if the doubao-app agent is selected
   const selectedIds = AgentRegistry.getSelectedIds();
   if (selectedIds.includes('doubao-app')) {
@@ -318,6 +287,58 @@ function notifyConfigUpdated() {
   }
 }
 
+/**
+ * Detect the installation path for a given agent by searching common locations.
+ * @param {string} agentId - The agent ID (e.g. 'doubao-app')
+ * @returns {string|null} The detected install path, or null if not found
+ */
+function detectInstallPath(agentId) {
+  const agentConfig = store.get(`agents.${agentId}`) || {};
+  const savedPath = (agentConfig.install_path || '').trim();
+  if (savedPath) {
+    const fs = require('fs');
+    if (fs.existsSync(savedPath)) return savedPath;
+  }
+
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const programFiles = process.env.PROGRAMFILES || '';
+  const userProfile = process.env.USERPROFILE || '';
+
+  // Determine the executable name based on agent
+  const defaultExeName = agentId === 'doubao-app' ? 'Doubao.exe' : `${agentId}.exe`;
+
+  const fs = require('fs');
+
+  // Common search paths
+  const paths = [
+    path.join(localAppData, 'doubao', defaultExeName),
+    path.join(localAppData, 'Doubao', defaultExeName),
+    path.join(localAppData, 'Programs', 'Doubao', defaultExeName),
+    path.join(userProfile, 'AppData', 'Local', 'doubao', defaultExeName),
+    path.join(userProfile, 'AppData', 'Local', 'Doubao', defaultExeName),
+    path.join(programFiles, 'doubao', defaultExeName),
+    path.join(programFiles, 'Doubao', defaultExeName),
+  ];
+
+  // Scan all drive letters for Program Files variants
+  const drives = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  for (const letter of drives) {
+    const root = letter + ':\\';
+    try { fs.readdirSync(root); } catch (e) { continue; }
+    paths.push(path.join(root, 'Program Files', 'doubao', defaultExeName));
+    paths.push(path.join(root, 'Program Files', 'Doubao', defaultExeName));
+    paths.push(path.join(root, 'Program Files (x86)', 'doubao', defaultExeName));
+    paths.push(path.join(root, 'Program Files (x86)', 'Doubao', defaultExeName));
+  }
+
+  // Search paths
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  return null;
+}
+
 // Launch Doubao desktop app with remote debugging port
 function launchDoubaoWithDebug() {
   // Read install_path and endpoint from agent config
@@ -327,125 +348,89 @@ function launchDoubaoWithDebug() {
   const match = endpoint.match(/:(\d+)$/);
   const debugPort = match ? match[1] : '9225';
 
-  const localAppData = process.env.LOCALAPPDATA || '';
-  const programFiles = process.env.PROGRAMFILES || '';
-  const userProfile = process.env.USERPROFILE || '';
-  const defaultExeName = 'Doubao.exe';
+  // Auto-detect if no install path set
+  const exePath = installPath || detectInstallPath('doubao-app');
 
-  // Build search paths: if installPath is set, use it directly; otherwise auto-detect
-  const searchPaths = installPath
-    ? [installPath]
-    : (function() {
-        const paths = [
-          path.join(localAppData, 'doubao', defaultExeName),
-          path.join(localAppData, 'Doubao', defaultExeName),
-          path.join(localAppData, 'Programs', 'Doubao', defaultExeName),
-          path.join(userProfile, 'AppData', 'Local', 'doubao', defaultExeName),
-          path.join(userProfile, 'AppData', 'Local', 'Doubao', defaultExeName),
-          path.join(programFiles, 'doubao', defaultExeName),
-          path.join(programFiles, 'Doubao', defaultExeName),
-        ];
-        // Scan all drive letters for Program Files variants
-        const fs = require('fs');
-        const drives = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-        for (const letter of drives) {
-          const root = letter + ':\\';
-          try { fs.readdirSync(root); } catch (e) { continue; }
-          paths.push(path.join(root, 'Program Files', 'doubao', defaultExeName));
-          paths.push(path.join(root, 'Program Files', 'Doubao', defaultExeName));
-          paths.push(path.join(root, 'Program Files (x86)', 'doubao', defaultExeName));
-          paths.push(path.join(root, 'Program Files (x86)', 'Doubao', defaultExeName));
+  if (!exePath) {
+    // Fallback: try `where` command
+    exec('where Doubao.exe 2>nul', (err, stdout) => {
+      if (!err && stdout) {
+        const found = stdout.trim().split('\n')[0].trim();
+        if (found) {
+          launchExe(found, debugPort);
+          return;
         }
-        return paths;
-      })();
-  console.log('[Main] Doubao search paths:', searchPaths);
-
-  // Helper: find the Doubao executable
-  function findExe(callback) {
-    const fs = require('fs');
-    for (const p of searchPaths) {
-      if (fs.existsSync(p)) {
-        return callback(null, p);
       }
-    }
-    // Fallback: try `where` command only in auto-detect mode
-    if (!installPath) {
-      exec(`where ${defaultExeName} 2>nul`, (err, stdout) => {
-        if (!err && stdout) {
-          const found = stdout.trim().split('\n')[0].trim();
-          if (found) return callback(null, found);
-        }
-        callback(new Error('找不到豆包桌面端，请确认已安装'));
-      });
-    } else {
-      callback(new Error('找不到豆包桌面端，请确认安装路径正确'));
-    }
+      showNotification('Initialization Failed', '找不到豆包桌面端，请确认已安装');
+    });
+    return;
   }
 
-  findExe((err, exePath) => {
-    if (err) {
-      showNotification('Initialization Failed', err.message);
-      return;
-    }
+  launchExe(exePath, debugPort);
+}
 
-    // Kill any existing Doubao processes using the actual exe name
-    const exeName = path.basename(exePath);
-    exec(`taskkill /F /IM ${exeName} 2>nul`, () => {
-      // Wait briefly for process to terminate
-      setTimeout(() => {
-        const args = [`--remote-debugging-port=${debugPort}`];
-        const child = spawn(exePath, args, {
-          detached: true,
-          stdio: 'ignore',
-        });
-        child.unref();
-        console.log(`[Main] Launched Doubao with --remote-debugging-port=${debugPort}:`, exePath);
-        showNotification('Doubao Initialized', `已启动豆包（调试端口 ${debugPort}）`);
-      }, 1000);
-    });
+function launchExe(exePath, debugPort) {
+  const exeName = path.basename(exePath);
+
+  // Kill any existing Doubao processes
+  exec(`taskkill /F /IM ${exeName} 2>nul`, () => {
+    // Wait briefly for process to terminate
+    setTimeout(() => {
+      const args = [`--remote-debugging-port=${debugPort}`];
+      const child = spawn(exePath, args, {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+      console.log(`[Main] Launched ${exeName} with --remote-debugging-port=${debugPort}:`, exePath);
+      showNotification('Doubao Initialized', `已启动豆包（调试端口 ${debugPort}）`);
+    }, 1000);
   });
 }
 
-// Register global shortcuts for all selected agents
+// Register global shortcuts for all enabled prompt shortcuts across selected agents
 function registerAllShortcuts() {
   globalShortcut.unregisterAll();
 
   const agents = AgentRegistry.getAll();
   const selectedIds = AgentRegistry.getSelectedIds();
-  const registeredShortcuts = new Map(); // shortcut -> first selected agent that owns it
+  const registeredShortcuts = new Map(); // shortcut -> { agentId, promptId }
   let count = 0;
 
   for (const agent of agents) {
     // Only register shortcuts for selected/checked agents
     if (!selectedIds.includes(agent.id)) continue;
 
-    const shortcut = store.get(`agents.${agent.id}.shortcut`);
-    if (!shortcut) continue;
+    const promptShortcuts = store.get(`agents.${agent.id}.promptShortcuts`) || {};
+    for (const [promptId, config] of Object.entries(promptShortcuts)) {
+      const shortcut = (config.shortcut || '').trim();
+      if (!shortcut || !config.enabled) continue;
 
-    // If this shortcut is already registered for another selected agent, skip
-    if (registeredShortcuts.has(shortcut)) {
-      console.log(`[Main] Shortcut "${shortcut}" already registered for "${registeredShortcuts.get(shortcut)}", skipping "${agent.id}"`);
-      continue;
-    }
+      // If this shortcut is already registered, skip (first come first served)
+      if (registeredShortcuts.has(shortcut)) {
+        console.log(`[Main] Shortcut "${shortcut}" already registered for "${registeredShortcuts.get(shortcut).agentId}/${registeredShortcuts.get(shortcut).promptId}", skipping "${agent.id}/${promptId}"`);
+        continue;
+      }
 
-    const registered = globalShortcut.register(shortcut, () => {
-      handleShortcut(agent.id);
-    });
+      const registered = globalShortcut.register(shortcut, () => {
+        handleShortcut(agent.id, promptId);
+      });
 
-    if (registered) {
-      registeredShortcuts.set(shortcut, agent.id);
-      count++;
-      console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}`);
-    } else {
-      console.error(`[Main] Failed to register shortcut for ${agent.id}: ${shortcut}`);
+      if (registered) {
+        registeredShortcuts.set(shortcut, { agentId: agent.id, promptId });
+        count++;
+        console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}/${promptId}`);
+      } else {
+        console.error(`[Main] Failed to register shortcut for ${agent.id}/${promptId}: ${shortcut}`);
+      }
     }
   }
 
-  console.log(`[Main] Registered ${count} shortcut(s) for selected agents`);
+  console.log(`[Main] Registered ${count} prompt shortcut(s) for selected agents`);
 }
 
 // Main shortcut handler
-async function handleShortcut(agentId) {
+async function handleShortcut(agentId, promptId) {
   if (isProcessing) {
     showNotification('Already Processing', 'Please wait for the current request to complete');
     return;
@@ -470,16 +455,15 @@ async function handleShortcut(agentId) {
     const screenshotBuffer = await takeScreenshot();
     console.log('Screenshot captured:', screenshotBuffer.length, 'bytes');
 
-    // 3. Get selected prompt
+    // 3. Get prompt text based on the promptId that triggered this shortcut
     let customPrompt = null;
-    const selectedId = store.get('selected_prompt_id');
-    if (selectedId && selectedId === 'system-default') {
+    if (promptId === 'system-default') {
       // Load the built-in default prompt from config
       customPrompt = (store.get('default_prompt') || '').trim();
       if (customPrompt) console.log('Using system default prompt');
-    } else if (selectedId) {
+    } else if (promptId) {
       const prompts = store.get('prompts') || [];
-      const found = prompts.find(function(p) { return p.id === selectedId; });
+      const found = prompts.find(function(p) { return p.id === promptId; });
       if (found && found.content && found.content.trim()) {
         customPrompt = found.content.trim();
         console.log('Using custom prompt:', found.name);
@@ -757,12 +741,33 @@ function setupIpcHandlers() {
     Object.keys(updates).forEach(key => {
       store.set(`${agentPath}.${key}`, updates[key]);
     });
-    // Sync endpoint to live agent instance so it takes effect immediately
-    if (updates.endpoint) {
-      const agent = AgentRegistry.getAgent(agentId);
-      if (agent) agent.endpoint = updates.endpoint;
+    // Sync endpoint and install_path to live agent instance so they take effect immediately
+    const agent = AgentRegistry.getAgent(agentId);
+    if (agent) {
+      if (updates.endpoint) agent.endpoint = updates.endpoint;
+      if (updates.install_path) agent.installPath = updates.install_path;
     }
     // Re-register all shortcuts in case shortcut config changed
+    registerAllShortcuts();
+    return { success: true };
+  });
+
+  // Auto-detect install path for an agent
+  ipcMain.handle('detect-install-path', (event, agentId) => {
+    const detectedPath = detectInstallPath(agentId);
+    return { path: detectedPath };
+  });
+
+  // Save a prompt shortcut for an agent
+  ipcMain.handle('save-prompt-shortcut', (event, agentId, promptId, shortcut) => {
+    store.set(`agents.${agentId}.promptShortcuts.${promptId}.shortcut`, shortcut);
+    registerAllShortcuts();
+    return { success: true };
+  });
+
+  // Set enabled state for a prompt on an agent
+  ipcMain.handle('set-prompt-enabled', (event, agentId, promptId, enabled) => {
+    store.set(`agents.${agentId}.promptShortcuts.${promptId}.enabled`, enabled);
     registerAllShortcuts();
     return { success: true };
   });
