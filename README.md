@@ -1,195 +1,78 @@
-# OpenCLI Smart Assistant
+# Open Assistant
 
-AI-powered intelligent code and document completion assistant. Triggered by global shortcut, analyzes your screen context, and automatically inserts smart suggestions at your cursor position.
+[中文版](README_ZH.md)
+
+AI-powered code and document completion assistant. Captures your screen, sends it to an AI agent (e.g., Doubao Desktop), and waits for the AI to insert the generated response at your cursor.
+
+## How It Works
+
+1. Configure one or more AI agents and write prompts
+2. Assign a global keyboard shortcut to each prompt you want to use
+3. Press the shortcut anytime — the assistant screenshots your screen, sends it to the AI with the chosen prompt, and waits for the AI to insert the response
 
 ## Features
 
-- 🎯 **Global Shortcut** - Press `Ctrl+Space` (customizable) anywhere to trigger
-- 📸 **Screen Analysis** - Captures and analyzes your current screen context
-- 🤖 **AI-Powered** - Uses Doubao App for intelligent code/document completion
-- ✍️ **Auto-Insert** - Automatically pastes results at your cursor position
-- 🎨 **Beautiful UI** - Clean settings interface with real-time status
-- 🔧 **Configurable** - Customize shortcut, timeout, behavior
+- **Multi-Agent Support** — Manage multiple AI agents (Doubao Desktop, etc.) from one interface
+- **Per-Prompt Shortcuts** — Each prompt gets its own global hotkey. No more "select then trigger"
+- **Two Capture Modes**
+  - **SSE Fetch** — Intercepts the AI response at the network level. Works even when the chat window is minimized to tray
+  - **DOM Poll** — Retrieves responses by polling the DOM of the Doubao chat page
+- **Two Output Modes**
+  - **Streaming** — Pastes text incrementally as the AI generates it
+  - **Full** — Waits for the complete response, then pastes at once
+- **Streaming Clipboard** — Preserves your original clipboard content and restores it after pasting
+- **System Tray** — Runs quietly in the system tray. No window needed
+- **Auto-Detect Install Path** — Finds the Doubao executable automatically on startup
+- **Custom Prompts** — Create, edit, and delete prompt templates in the settings UI
 
-## Prerequisites
-
-1. **Doubao Desktop App** installed and launched with remote debugging:
-   ```bash
-   # Windows
-   "D:\Program Files\Doubao\Doubao.exe" --remote-debugging-port=9225
-   
-   # macOS
-   /Applications/Doubao.app/Contents/MacOS/Doubao --remote-debugging-port=9225
-   ```
-
-2. **Node.js** >= 18.0.0
-
-## Installation
+## Quick Start
 
 ```bash
-# Clone or navigate to the assistant directory
-cd opencli-assistant
-
 # Install dependencies
 npm install
 
-# Start the application
+# Run in development mode
+npm run dev
+
+# Or run normally
 npm start
 ```
 
-For development mode with DevTools:
+### Build for Distribution
+
 ```bash
-npm run dev
+# All platforms
+npm run build
+
+# Platform-specific
+npm run build:win
+npm run build:mac
+npm run build:linux
 ```
 
 ## Usage
 
-### 1. Launch Doubao App
-
-Make sure Doubao is running with CDP enabled:
-```bash
-"D:\Program Files\Doubao\Doubao.exe" --remote-debugging-port=9225
-```
-
-### 2. Start OpenCLI Assistant
-
-```bash
-npm start
-```
-
-The app will run in your system tray.
-
-### 3. Configure Settings
-
-Open the settings window and verify:
-- **CDP Endpoint**: `http://127.0.0.1:9225`
-- **Shortcut**: `Control+Space` (or your preferred shortcut)
-- **Auto Insert**: Enabled (recommended)
-
-### 4. Use the Assistant
-
-1. Switch to any application (VS Code, Word, browser, etc.)
-2. Press `Ctrl+Space`
-3. Wait for analysis (10-30 seconds)
-4. Result is automatically inserted at your cursor!
-
-## Configuration
-
-### Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `shortcut` | Global keyboard shortcut | `Control+Space` |
-| `doubao_cdp_endpoint` | Doubao CDP endpoint URL | `http://127.0.0.1:9225` |
-| `timeout_seconds` | Analysis timeout | `30` |
-| `auto_insert` | Auto-paste results | `true` |
-| `show_notifications` | Show system notifications | `true` |
-| `log_level` | Logging verbosity | `info` |
-
-### Environment Variables
-
-```bash
-# Optional: Override CDP endpoint
-export OPENCLI_CDP_ENDPOINT=http://127.0.0.1:9225
-```
-
-## Project Structure
-
-```
-opencli-assistant/
-├── main.js                    # Electron main process
-├── preload.js                 # Preload script (security bridge)
-├── config.json                # Default configuration
-├── core/
-│   ├── screenshot.js          # Screen capture module
-│   ├── doubao-client.js       # Doubao CDP client
-│   ├── clipboard.js           # Clipboard & keyboard simulation
-│   └── context-analyzer.js    # Active window detection
-├── renderer/
-│   ├── index.html             # Settings UI
-│   ├── styles.css             # UI styles
-│   └── renderer.js            # UI logic
-└── package.json               # Project dependencies
-```
-
-## How It Works
-
-1. **Shortcut Detection**: Listens for global keyboard shortcut
-2. **Context Detection**: Identifies active application (code editor, document editor, etc.)
-3. **Screen Capture**: Takes screenshot of current screen
-4. **AI Analysis**: Sends context to Doubao via CDP for intelligent analysis
-5. **Result Insertion**: Automatically pastes AI-generated content at cursor position
-
-## Building for Production
-
-### Windows
-```bash
-npm run build:win
-```
-Output: `dist/opencli-assistant-Setup.exe`
-
-### macOS
-```bash
-npm run build:mac
-```
-Output: `dist/OpenCLI Assistant.dmg`
-
-### Linux
-```bash
-npm run build:linux
-```
-Output: `dist/OpenCLI Assistant.AppImage`
+1. Open the settings window from the system tray
+2. Set the CDP endpoint for each agent in its card (e.g., `http://127.0.0.1:9225`). Different agents can use different ports — the port is just an example
+3. Click **Initialize** in the agent card or **Initialize Doubao** in the tray menu to launch the agent with remote debugging
+4. In each agent card, click the ✏️ icon on a prompt capsule to assign a global shortcut
+5. Press the shortcut in any application to trigger the assistant
 
 ## Troubleshooting
 
-### "No inspectable targets found"
-- Make sure Doubao is launched with `--remote-debugging-port=9225`
-- Verify the port is not blocked by firewall
+### Cannot connect to the AI agent
+- Use **Initialize** in the agent card, or **Initialize Doubao** in the tray menu to start the agent with the correct debugging port
+- Check whether the port is blocked by a firewall
 
 ### Shortcut not working
 - Check for shortcut conflicts with other applications
 - Try a different shortcut combination
-- On macOS, grant Accessibility permissions
-
-### Robotjs installation fails
-- Windows: Install Visual Studio Build Tools
-- macOS: Install Xcode Command Line Tools
-- Linux: Install `libx11-dev libxkbfile-dev`
+- On macOS, grant Accessibility permissions to the app
 
 ### Results not inserting
-- Ensure `auto_insert` is enabled in settings
-- Check if the target application accepts clipboard paste
-- Try manual paste (Ctrl+V)
-
-## Security & Privacy
-
-- ✅ Screenshots are processed locally only
-- ✅ No data is stored or transmitted externally
-- ✅ CDP connection is localhost only
-- ✅ Clipboard content is restored after paste
-
-## Future Enhancements
-
-- [ ] Multi-AI support (Claude, GPT-4, etc.)
-- [ ] Code template library
-- [ ] History of completions
-- [ ] Custom prompt templates
-- [ ] Plugin system
-- [ ] Voice commands
+- Ensure **Auto Insert** is enabled in settings
+- Make sure the editor you are using keeps focus while waiting for the AI response
 
 ## License
 
 Apache-2.0
-
-## Credits
-
-Built with ❤️ using:
-- [Electron](https://www.electronjs.org/)
-- [OpenCLI](https://github.com/jackwener/opencli)
-- [RobotJS](https://robotjs.io/)
-- [screenshot-desktop](https://github.com/bencevans/screenshot-desktop)
-
-## Support
-
-For issues and feature requests, please visit:
-https://github.com/jackwener/opencli
