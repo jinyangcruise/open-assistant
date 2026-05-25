@@ -5,10 +5,9 @@
 
   "usage": {
     "title": "Usage",
-    "step1": "Select one or more Agents in the <strong>AI Agent</strong> section below",
-    "step2": "Click the ✏️ icon on a prompt capsule to set a global shortcut",
-    "step3": "<strong>Enable</strong> the shortcut by toggling the switch on the capsule",
-    "step4": "Press the shortcut in any application to trigger AI analysis",
+    "step1": "Select the Agent you want to use on the home page. Click ✏️ on a prompt capsule to set a shortcut, then toggle the switch on the right to enable it.",
+    "step2": "Click ⚙️ in the top-right corner to access Settings: manage prompts, configure general options.",
+    "step3": "Press an enabled shortcut in any application to trigger AI analysis. The result will be automatically inserted at your cursor.",
     "note": "Shortcuts work even when this window is closed. When multiple prompts share the same shortcut, only the first one registered takes effect."
   },
 
@@ -59,6 +58,7 @@
 
   "config": {
     "title": "⚙️ Configuration",
+    "general": "General",
     "timeout": "Timeout (seconds)",
     "outputDest": "Output Destination",
     "outputAuto": "Auto insert at cursor",
@@ -81,6 +81,12 @@
     "autoLaunch": "Launch at system startup",
     "quietStart": "Start silently (minimize to tray)",
     "autoInitAgent": "Initialize Doubao on startup"
+  },
+
+  "about": {
+    "title": "About",
+    "version": "Version",
+    "description": "AI-powered code and document completion assistant"
   },
 
   "result": {

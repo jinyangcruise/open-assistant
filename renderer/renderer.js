@@ -13,6 +13,15 @@ const resetBtn = document.getElementById('resetBtn');
 const resultContainer = document.getElementById('resultContainer');
 const logContainer = document.getElementById('logContainer');
 
+// View elements
+const homeView = document.getElementById('homeView');
+const settingsView = document.getElementById('settingsView');
+const historyView = document.getElementById('historyView');
+const settingsBtn = document.getElementById('settingsBtn');
+const backBtn = document.getElementById('backBtn');
+const historyBtn = document.getElementById('historyBtn');
+const historyBackBtn = document.getElementById('historyBackBtn');
+
 // Prompt state
 let prompts = [];
 let selectedPromptId = 'system-default';
@@ -47,6 +56,53 @@ const confirmDialogTitle = document.getElementById('confirmDialogTitle');
 const confirmDialogMessage = document.getElementById('confirmDialogMessage');
 const confirmDialogOk = document.getElementById('confirmDialogOk');
 const confirmDialogCancel = document.getElementById('confirmDialogCancel');
+
+// ===== View Navigation =====
+
+function showSettings() {
+  homeView.style.display = 'none';
+  historyView.style.display = 'none';
+  settingsView.style.display = 'block';
+}
+
+function showHistory() {
+  homeView.style.display = 'none';
+  settingsView.style.display = 'none';
+  historyView.style.display = 'block';
+}
+
+function showHome() {
+  settingsView.style.display = 'none';
+  historyView.style.display = 'none';
+  homeView.style.display = 'block';
+}
+
+// ===== Settings & History Tabs =====
+
+function setupTabListeners() {
+  // Settings tabs (data-tab -> #tabXxx)
+  document.querySelectorAll('#settingsView .tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#settingsView .tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      var tabName = btn.getAttribute('data-tab');
+      document.querySelectorAll('#settingsView .tab-content').forEach(function(tc) { tc.style.display = 'none'; });
+      var target = document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+      if (target) target.style.display = 'block';
+    });
+  });
+  // History tabs (data-histab -> #histabXxx)
+  document.querySelectorAll('#historyView .tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('#historyView .tab-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      var tabName = btn.getAttribute('data-histab');
+      document.querySelectorAll('#historyView .tab-content').forEach(function(tc) { tc.style.display = 'none'; });
+      var target = document.getElementById('histab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+      if (target) target.style.display = 'block';
+    });
+  });
+}
 
 // ===== i18n =====
 
@@ -156,6 +212,15 @@ async function init() {
 }
 
 function setupEventListeners() {
+  // Navigation
+  settingsBtn.addEventListener('click', showSettings);
+  backBtn.addEventListener('click', showHome);
+  historyBtn.addEventListener('click', showHistory);
+  historyBackBtn.addEventListener('click', showHome);
+
+  // Settings & History tabs
+  setupTabListeners();
+
   // Auto-save on any form field change
   const formInputs = configForm.querySelectorAll('input, select');
   for (const input of formInputs) {
