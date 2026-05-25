@@ -791,10 +791,8 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
       '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutEditTitle') + '">✏️</button>' +
             clearBtnHtml +
       '</div>' +
-      '<button class="prompt-capsule-toggle" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '">' +
-      '  <div class="toggle-track' + (enabled ? ' active' : '') + '">' +
-      '    <div class="toggle-knob"></div>' +
-      '  </div>' +
+      '<button class="capsule-btn' + (enabled ? ' active' : '') + '" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '">' +
+            (enabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
       '</button>';
 
     // Edit button: open shortcut recorder
@@ -816,7 +814,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
     }
 
     // Toggle button: enable/disable this prompt shortcut
-    var toggleBtn = capsule.querySelector('.prompt-capsule-toggle');
+    var toggleBtn = capsule.querySelector('.capsule-btn');
     toggleBtn.addEventListener('click', async function(e) {
       e.stopPropagation();
       var newEnabled = !enabled;

@@ -51,6 +51,8 @@
     "shortcutEditTitle": "Set shortcut",
     "shortcutClearTitle": "Clear shortcut",
     "info": "Configure each agent and set shortcuts for each prompt. Press a shortcut to trigger that agent with the chosen prompt.",
+    "btnEnable": "▶ Enable",
+    "btnInUse": "✓ In use",
     "names": {
       "doubao-app": "Doubao Desktop"
     }

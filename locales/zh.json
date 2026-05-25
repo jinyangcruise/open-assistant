@@ -52,6 +52,8 @@
     "shortcutEditTitle": "设置快捷键",
     "shortcutClearTitle": "清除快捷键",
     "info": "配置每个 Agent 并为每个提示词设置快捷键。按下快捷键即可使用对应 Agent 和提示词触发 AI 分析。",
+    "btnEnable": "▶ 启用",
+    "btnInUse": "✓ 使用中",
     "names": {
       "doubao-app": "豆包桌面端"
     }

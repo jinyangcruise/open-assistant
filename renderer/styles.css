@@ -986,59 +986,42 @@ footer a:hover {
   opacity: 1;
 }
 
-/* Toggle Switch */
-.prompt-capsule-toggle {
+/* Capsule Action Button (Enable / In use) */
+.capsule-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 100%;
-  min-height: 36px;
-  padding: 0;
-  border: none;
-  border-left: 1px solid var(--border-color);
-  background: transparent;
+  gap: 0.15rem;
+  min-width: 82px;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--primary-color);
+  border-radius: 5px;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
   transition: all 0.15s;
-  position: relative;
+  line-height: 1;
+  margin: 0.25rem 0.35rem;
 }
 
-.prompt-capsule-toggle:hover {
-  background: #f1f5f9;
+.capsule-btn:hover {
+  opacity: 0.85;
 }
 
-.prompt-capsule.active .prompt-capsule-toggle {
-  border-left-color: var(--primary-color);
+.capsule-btn.active {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #6b7280;
+  font-weight: 500;
 }
 
-.toggle-track {
-  width: 28px;
-  height: 16px;
-  border-radius: 10px;
+.capsule-btn.active:hover {
   background: #d1d5db;
-  position: relative;
-  transition: background 0.2s;
-}
-
-.toggle-track.active {
-  background: var(--primary-color);
-}
-
-.toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  transition: transform 0.2s;
-}
-
-.toggle-track.active .toggle-knob {
-  transform: translateX(12px);
+  border-color: #9ca3af;
 }
 
 /* Responsive */
