@@ -30,10 +30,34 @@
         </div>
       </section>
 
+      <!-- Prompt Management Section -->
+      <section class="prompts-section">
+        <h2>Prompt Management</h2>
+
+        <div id="promptsList" class="prompts-list">
+          <!-- Rendered by renderer.js -->
+        </div>
+
+        <div class="prompts-actions">
+          <button id="addPromptBtn" class="btn btn-sm btn-primary">+ Add</button>
+        </div>
+      </section>
+
+      <!-- Agent Management Section -->
+      <section class="agents-section">
+        <h2>AI Agent</h2>
+        <div class="agents-info">
+          <span class="help-text">Configure each agent's shortcut key. Press the shortcut to trigger that agent's service.</span>
+        </div>
+        <div id="agentsList" class="agents-list">
+          <!-- Rendered by renderer.js -->
+        </div>
+      </section>
+
       <!-- Configuration Section -->
       <section class="config-section">
         <h2>⚙️ Configuration</h2>
-        
+
         <form id="configForm">
 
           <div class="form-group">
@@ -72,9 +96,9 @@
             <label for="responseMode">Capture Mode</label>
             <select id="responseMode" name="response_mode">
               <option value="sse-fetch">SSE Fetch (推荐，窗口关闭到托盘也能用)</option>
-              <option value="dom-poll">DOM Poll (需要聊天窗口可见)</option>
+              <option value="dom-poll">DOM Poll (豆包窗口需保持打开状态)</option>
             </select>
-            <span class="help-text">SSE Fetch 在浏览器层面截获 AI 回复，窗口关闭到托盘时也能正常工作。DOM Poll 通过页面 DOM 轮询获取回复，需要窗口保持可见。</span>
+            <span class="help-text">SSE Fetch 通过 CDP 拦截 AI 接口的 HTTP 流式响应来获取回复，不需要窗口保持可见。DOM Poll 通过页面 DOM 轮询获取回复，需要豆包窗口保持打开状态。</span>
           </div>
 
           <div class="form-group">
@@ -90,30 +114,6 @@
             <button type="button" id="resetBtn" class="btn btn-secondary">Reset to Defaults</button>
           </div>
         </form>
-      </section>
-
-      <!-- Prompt Management Section -->
-      <section class="prompts-section">
-        <h2>Prompt Management</h2>
-        
-        <div id="promptsList" class="prompts-list">
-          <!-- Rendered by renderer.js -->
-        </div>
-
-        <div class="prompts-actions">
-          <button id="addPromptBtn" class="btn btn-sm btn-primary">+ Add</button>
-        </div>
-      </section>
-
-      <!-- Agent Management Section -->
-      <section class="agents-section">
-        <h2>AI Agent</h2>
-        <div class="agents-info">
-          <span class="help-text">Configure each agent's shortcut key. Press the shortcut to trigger that agent's service.</span>
-        </div>
-        <div id="agentsList" class="agents-list">
-          <!-- Rendered by renderer.js -->
-        </div>
       </section>
 
       <!-- Results Section -->
@@ -134,7 +134,7 @@
     </main>
 
     <footer>
-      <p><a href="https://github.com/jinyangcruise/open-assistant" target="_blank">GitHub</a></p>
+      <p><a href="https://github.com/jinyangcruise/OpenAssistant" target="_blank">GitHub</a></p>
     </footer>
   </div>
 
