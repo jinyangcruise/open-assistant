@@ -9,7 +9,7 @@
 
   "usage": {
     "title": "使用说明",
-    "step1": "在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent",
+    "step1": "在首页 AI Agent 区域选择一个或多个 Agent。",
     "step2": "在每个 Agent 的提示词胶囊中点击 ✏️ 图标设置快捷键",
     "step3": "通过胶囊右侧的开关 <strong>启用</strong> 该提示词的快捷键",
     "step4": "在任何应用中按下快捷键即可触发对应 Agent 和提示词的 AI 分析",
