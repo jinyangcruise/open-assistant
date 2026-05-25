@@ -1,3 +1,29 @@
+# Changelog
+
+## v0.5.2 — 2026-05-25
+
+### English
+
+#### Improvements
+- **Settings tabs redesigned**: Capsule/pill style with smooth hover and active states
+- **Checkbox help text**: All checkboxes now show descriptive help text aligned below
+- **Startup optimization**: Auto-init Doubao checks if endpoint is already responding before launching
+
+#### Changes
+- Updated CHANGELOG to track releases
+
+---
+
+### 中文
+
+#### 改进
+- **设置页签改版**：胶囊/药丸风格，平滑悬停和激活状态
+- **复选框帮助文字**：所有复选框显示对齐的帮助说明
+- **启动优化**：自动初始化豆包前先检测 Endpoint 是否已在响应
+
+#### 变更
+- 更新 CHANGELOG 以跟踪版本
+
 ## v0.5.1 — 2026-05-25
 
 ### English
