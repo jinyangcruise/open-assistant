@@ -35,6 +35,12 @@ body {
   flex-direction: column;
 }
 
+#homeView, #settingsView, #historyView {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 /* ===== Top Bar ===== */
 .top-bar {
   display: flex;

@@ -62,19 +62,19 @@ const confirmDialogCancel = document.getElementById('confirmDialogCancel');
 function showSettings() {
   homeView.style.display = 'none';
   historyView.style.display = 'none';
-  settingsView.style.display = 'block';
+  settingsView.style.display = 'flex';
 }
 
 function showHistory() {
   homeView.style.display = 'none';
   settingsView.style.display = 'none';
-  historyView.style.display = 'block';
+  historyView.style.display = 'flex';
 }
 
 function showHome() {
   settingsView.style.display = 'none';
   historyView.style.display = 'none';
-  homeView.style.display = 'block';
+  homeView.style.display = 'flex';
 }
 
 // ===== Settings & History Tabs =====
