@@ -29,6 +29,8 @@ AI-powered code and document completion assistant. Captures your screen, sends i
 
 ## Quick Start
 
+**Prerequisites:** Node.js >= 18
+
 ```bash
 # Install dependencies
 npm install
