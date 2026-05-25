@@ -229,6 +229,47 @@ section {
   text-decoration: underline;
 }
 
+.about-update {
+  margin-top: 1rem;
+}
+
+.about-update .btn {
+  background: rgba(255,255,255,0.2);
+  border-color: rgba(255,255,255,0.4);
+  color: #fff;
+  font-size: 0.82rem;
+}
+
+.about-update .btn:hover {
+  background: rgba(255,255,255,0.3);
+  border-color: rgba(255,255,255,0.6);
+}
+
+.update-icon {
+  display: inline-block;
+  transition: transform 0.3s;
+}
+
+.update-icon.spinning {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.update-status {
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.update-status.visible {
+  opacity: 1;
+}
+
 /* Usage Section */
 .usage-card {
   padding: 1.5rem 2rem;

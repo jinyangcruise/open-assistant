@@ -89,7 +89,15 @@
   "about": {
     "title": "About",
     "version": "Version",
-    "description": "AI-powered code and document completion assistant"
+    "description": "AI-powered code and document completion assistant",
+    "checkUpdate": "Check for Updates",
+    "uptodate": "Already up to date!",
+    "newVersion": "New version {version} available!",
+    "checkFailed": "Failed to check updates",
+    "checking": "Checking...",
+    "downloading": "Downloading...",
+    "readyInstall": "Downloaded! Click to restart and install",
+    "releaseNotes": "Release Notes"
   },
 
   "faq": {

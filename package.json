@@ -26,6 +26,7 @@
   "dependencies": {
     "@jackwener/opencli": "^1.8.0",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.3",
     "screenshot-desktop": "^1.15.0",
     "ws": "^8.18.0"
   },
@@ -81,6 +82,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jinyangcruise",
+      "repo": "OpenAssistant"
     }
   }
 }

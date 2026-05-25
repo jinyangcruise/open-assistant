@@ -11,6 +11,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, Tray, Menu, Notification, clipboard, nativeImage, screen, shell } = require('electron');
 const path = require('path');
 const { exec, spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 const Store = require('electron-store');
 const { takeScreenshot } = require('./core/screenshot');
 const { pasteText, StreamingPaster, getText } = require('./core/clipboard-pure');
@@ -949,6 +950,35 @@ function setupIpcHandlers() {
     }
   });
 
+  // Check for updates
+  ipcMain.handle('check-for-updates', async () => {
+    if (!app.isPackaged) {
+      return { success: false, error: 'dev' };
+    }
+    try {
+      autoUpdater.checkForUpdates();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Download update
+  ipcMain.handle('download-update', async () => {
+    try {
+      autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Install update
+  ipcMain.handle('install-update', () => {
+    setImmediate(() => autoUpdater.quitAndInstall());
+    return { success: true };
+  });
+
 }
 
 // App lifecycle
@@ -984,7 +1014,43 @@ app.whenReady().then(() => {
       launchDoubaoWithDebug();
     }, 2000);
   }
+
+  // Configure auto-updater
+  // autoUpdater.logger = console; // Uncomment for debug logs
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
 });
+
+// ===== Auto Updater =====
+
+// Forward updater events to the renderer
+function setupUpdaterIpc() {
+  autoUpdater.on('checking-for-update', () => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { type: 'checking' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { type: 'available', version: info.version, info: info });
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { type: 'not-available' });
+  });
+
+  autoUpdater.on('error', (err) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { type: 'error', message: err.message });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { type: 'progress', percent: progress.percent });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    if (mainWindow) mainWindow.webContents.send('update-status', { type: 'downloaded', version: info.version });
+  });
+}
+
+setupUpdaterIpc();
 
 app.on('window-all-closed', (e) => {
   // Keep app running in tray

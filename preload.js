@@ -54,6 +54,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getLocale: (lang) => ipcRenderer.invoke('get-locale', lang),
   restartAgent: (agentId) => ipcRenderer.invoke('restart-agent', agentId),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateStatus: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('update-status', handler);
+    return () => ipcRenderer.removeListener('update-status', handler);
+  },
 });
 
 // Suppress link navigation inside the Electron window

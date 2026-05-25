@@ -204,7 +204,57 @@ async function init() {
     await loadPrompts();
     addLog(t('log.configUpdated'), 'info');
   });
-  
+
+  // Listen for update status from main process
+  window.electronAPI.onUpdateStatus(function(data) {
+    var statusEl = document.getElementById('updateStatus');
+    var icon = document.getElementById('updateIcon');
+    var btn = document.getElementById('checkUpdateBtn');
+    if (!statusEl) return;
+
+    switch (data.type) {
+      case 'checking':
+        statusEl.textContent = t('about.checking');
+        statusEl.className = 'update-status visible';
+        break;
+      case 'not-available':
+        icon.classList.remove('spinning');
+        btn.disabled = false;
+        statusEl.textContent = t('about.uptodate');
+        statusEl.className = 'update-status visible';
+        break;
+      case 'available':
+        icon.classList.remove('spinning');
+        btn.disabled = false;
+        statusEl.textContent = t('about.newVersion', { version: data.version });
+        statusEl.className = 'update-status visible';
+        statusEl.style.cursor = 'pointer';
+        statusEl.onclick = function() {
+          icon.classList.add('spinning');
+          btn.disabled = true;
+          statusEl.textContent = t('about.downloading');
+          window.electronAPI.downloadUpdate();
+        };
+        break;
+      case 'downloaded':
+        icon.classList.remove('spinning');
+        btn.disabled = false;
+        statusEl.textContent = t('about.readyInstall');
+        statusEl.className = 'update-status visible';
+        statusEl.style.cursor = 'pointer';
+        statusEl.onclick = function() {
+          window.electronAPI.installUpdate();
+        };
+        break;
+      case 'error':
+        icon.classList.remove('spinning');
+        btn.disabled = false;
+        statusEl.textContent = data.message || t('about.checkFailed');
+        statusEl.className = 'update-status visible';
+        break;
+    }
+  });
+
   // Load prompt management
   await loadPrompts();
 
@@ -302,6 +352,36 @@ function setupEventListeners() {
   confirmDialogOverlay.addEventListener('click', function(e) {
     if (e.target === this) confirmDialogReject();
   });
+
+  // Check for updates
+  document.getElementById('checkUpdateBtn').addEventListener('click', async function() {
+    var icon = document.getElementById('updateIcon');
+    var status = document.getElementById('updateStatus');
+
+    icon.classList.add('spinning');
+    this.disabled = true;
+    status.textContent = t('about.checking');
+    status.className = 'update-status visible';
+    status.onclick = null;
+    status.style.cursor = '';
+
+    var result = await window.electronAPI.checkForUpdates();
+    if (!result.success) {
+      icon.classList.remove('spinning');
+      this.disabled = false;
+      if (result.error === 'dev') {
+        status.textContent = '请先构建安装包后再检查更新';
+      } else {
+        status.textContent = t('about.checkFailed');
+      }
+    }
+  });
+
+  // Release notes
+  document.getElementById('releaseNotesBtn').addEventListener('click', function() {
+    window.electronAPI.openExternal('https://github.com/jinyangcruise/OpenAssistant/releases');
+  });
+
 }
 
 async function saveConfig() {
