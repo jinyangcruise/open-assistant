@@ -80,6 +80,11 @@ function t(key, replacements) {
   });
 }
 
+// Get translated agent name, fall back to adapter name
+function ta(agentId, defaultName) {
+  return (locale.agent && locale.agent.names && locale.agent.names[agentId]) || defaultName;
+}
+
 function applyTranslations() {
   // data-i18n: innerHTML replacement
   document.querySelectorAll('[data-i18n]').forEach(function(el) {
@@ -604,7 +609,7 @@ function renderAgents() {
       '</div>' +
       '<div class="agent-item-info">' +
       '  <div class="agent-item-header">' +
-      '    <div class="agent-item-name">' + escapeHtml(a.name) + '</div>' +
+      '    <div class="agent-item-name">' + escapeHtml(ta(a.id, a.name)) + '</div>' +
       '    <span class="agent-item-type">' + typeLabel + '</span>' +
       '  </div>' +
       '  <div class="agent-item-status" id="agent-status-' + a.id + '"></div>' +

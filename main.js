@@ -302,7 +302,7 @@ function rebuildTrayMenu() {
   if (selectedIds.includes('doubao-app')) {
     const agent = AgentRegistry.getAgent('doubao-app');
     menuItems.push({
-      label: tt('tray.initAgent', { name: agent ? agent.name : 'Doubao' }),
+      label: tt('tray.initAgent', { name: agent ? ((_trayLocale.agent && _trayLocale.agent.names && _trayLocale.agent.names[agent.id]) || agent.name) : 'Doubao' }),
       click: () => launchDoubaoWithDebug()
     });
   }

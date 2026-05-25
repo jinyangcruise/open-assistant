@@ -25,6 +25,8 @@ AI-powered code and document completion assistant. Captures your screen, sends i
 - **Auto-Detect Install Path** — Finds the Doubao executable automatically on startup
 - **Custom Prompts** — Create, edit, and delete prompt templates in the settings UI
 
+![Settings UI](screenshots/en/settings.png)
+
 ## Quick Start
 
 ```bash
