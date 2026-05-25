@@ -1,0 +1,145 @@
+{
+  "lang": "en",
+  "title": "Open Assistant",
+  "subtitle": "AI-powered code and document completion",
+
+  "usage": {
+    "title": "Usage",
+    "step1": "Select one or more Agents in the <strong>AI Agent</strong> section below",
+    "step2": "Click the ✏️ icon on a prompt capsule to set a global shortcut",
+    "step3": "<strong>Enable</strong> the shortcut by toggling the switch on the capsule",
+    "step4": "Press the shortcut in any application to trigger AI analysis",
+    "note": "Shortcuts work even when this window is closed. When multiple prompts share the same shortcut, only the first one registered takes effect."
+  },
+
+  "prompt": {
+    "title": "Prompt Management",
+    "add": "+ Add",
+    "systemDefault": "System Default",
+    "empty": "(empty)",
+    "editTitle": "Edit Prompt",
+    "editTitleDefault": "Edit Default Prompt",
+    "newTitle": "New Prompt",
+    "nameLabel": "Prompt Name",
+    "namePlaceholder": "e.g. Code Completion",
+    "contentLabel": "Prompt Content",
+    "contentPlaceholder": "Enter your prompt text here...",
+    "contentHelp": "This prompt will be sent as the full instruction to the AI. Write a clear and complete prompt.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "resetDefault": "Reset to Built-in Default",
+    "editBtnTitle": "Edit prompt",
+    "deleteBtnTitle": "Delete prompt",
+    "deleteConfirmTitle": "Delete Prompt",
+    "deleteConfirmMsg": "Are you sure you want to delete prompt \"{name}\"?",
+    "resetConfirmTitle": "Reset to Default",
+    "resetConfirmMsg": "Are you sure you want to reset to the built-in default prompt?",
+    "nameRequired": "Prompt name is required",
+    "contentRequired": "Prompt content is required"
+  },
+
+  "agent": {
+    "title": "AI Agent",
+    "desktop": "Desktop",
+    "web": "Web",
+    "noAgents": "No AI Agents configured.",
+    "cdpLabel": "CDP Endpoint:",
+    "installLabel": "Install Path:",
+    "installPlaceholder": "Leave empty for auto-detect",
+    "test": "Test",
+    "promptsTitle": "Prompts",
+    "shortcutUnset": "Not set",
+    "shortcutEditTitle": "Set shortcut",
+    "shortcutClearTitle": "Clear shortcut",
+    "info": "Configure each agent and set shortcuts for each prompt. Press a shortcut to trigger that agent with the chosen prompt."
+  },
+
+  "config": {
+    "title": "⚙️ Configuration",
+    "timeout": "Timeout (seconds)",
+    "outputDest": "Output Destination",
+    "outputAuto": "Auto insert at cursor",
+    "outputClipboard": "Generate to clipboard",
+    "outputHelp": "Auto insert: automatically pastes to your cursor. Generate to clipboard: copies to clipboard, press Ctrl+V to paste manually.",
+    "showNotifications": "Show notifications",
+    "logLevel": "Log Level",
+    "captureMode": "Capture Mode",
+    "captureSSE": "SSE Fetch (recommended, works when minimized to tray)",
+    "captureDOM": "DOM Poll (Doubao window must stay open)",
+    "captureHelp": "SSE Fetch intercepts the AI HTTP streaming response via CDP, no window visibility required. DOM Poll retrieves responses by polling the page DOM and requires the Doubao window to stay open.",
+    "outputMode": "Output Mode",
+    "outputStream": "Streaming (paste incrementally)",
+    "outputFull": "Full (paste after complete response)",
+    "outputModeHelp": "Streaming pastes the AI response incrementally as it generates. Full waits for the complete response before pasting.",
+    "reset": "Reset to Defaults",
+    "resetConfirmTitle": "Reset Settings",
+    "resetConfirmMsg": "Are you sure you want to reset all settings to defaults?",
+    "language": "Language"
+  },
+
+  "result": {
+    "title": "Last Result",
+    "placeholder": "No results yet. Trigger the assistant to see results here.",
+    "code": "💻 Code",
+    "document": "📄 Document",
+    "noContent": "No content",
+    "generatedAt": "Generated at {time}"
+  },
+
+  "log": {
+    "title": "📝 Activity Log",
+    "placeholder": "Activity logs will appear here...",
+    "configUpdated": "Configuration updated from tray",
+    "appInitialized": "Application initialized",
+    "configSaved": "Configuration saved",
+    "configSaveFailed": "Failed to save config: {msg}",
+    "configReset": "Settings reset to defaults",
+    "analysisComplete": "Analysis complete",
+    "analysisError": "Error: {msg}",
+    "promptDefaultUpdated": "Default prompt updated",
+    "promptSaved": "Prompt saved: {name}",
+    "promptDeleted": "Deleted prompt: {name}",
+    "installPathUpdated": "Install path updated for {agent}",
+    "installPathDetected": "Auto-detected install path for {name}: {path}",
+    "endpointUpdated": "CDP Endpoint updated for {agent}",
+    "shortcutSaved": "Shortcut saved for {agent}/{prompt}: {shortcut}",
+    "shortcutCleared": "Shortcut cleared for {agent} / {prompt}",
+    "promptEnabled": "Enabled prompt: {prompt} for {agent}",
+    "promptDisabled": "Disabled prompt: {prompt} for {agent}",
+    "agentEnabled": "Enabled agent: {name}",
+    "agentDisabled": "Disabled agent: {name}",
+    "agentToggleError": "Error toggling agent: {msg}",
+    "agentTesting": "Testing connection for agent: {id}...",
+    "agentConnected": "Agent connected: {id}",
+    "agentFailed": "Agent connection failed: {id} - {error}",
+    "agentTestError": "Error testing agent connection: {msg}",
+    "promptDefaultReset": "Default prompt reset to built-in value",
+    "selectedPrompt": "Selected prompt for editing: {name}",
+    "agentsLoadFailed": "Failed to load agents: {msg}"
+  },
+
+  "shortcut": {
+    "title": "Set Shortcut",
+    "hint": "Press your shortcut combination...",
+    "continue": "Press another key...",
+    "conflict": "⚠ This shortcut may be used by another application",
+    "save": "Saving...",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "saved": "Shortcut saved",
+    "error": "✗ {error}"
+  },
+
+  "confirm": {
+    "ok": "Confirm",
+    "cancel": "Cancel"
+  },
+
+  "status": {
+    "testing": "Testing...",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "error": "Error",
+    "testResult": "Connected ({title})"
+  }
+}

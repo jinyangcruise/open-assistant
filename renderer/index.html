@@ -9,8 +9,8 @@
 <body>
   <div class="container">
     <header>
-      <h1>🤖 Open Assistant</h1>
-      <p class="subtitle">AI-powered code and document completion</p>
+      <h1>🤖 <span data-i18n="title">Open Assistant</span></h1>
+      <p class="subtitle" data-i18n="subtitle">AI-powered code and document completion</p>
     </header>
 
     <main>
@@ -18,36 +18,36 @@
       <section class="usage-section">
         <div class="usage-card">
           <div class="usage-content">
-            <h2>使用说明</h2>
+            <h2 data-i18n="usage.title">使用说明</h2>
             <ol>
-              <li>在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent</li>
-              <li>在每个 Agent 的提示词胶囊中点击 ✏️ 图标设置快捷键</li>
-              <li>通过胶囊右侧的开关 <strong>启用</strong> 该提示词的快捷键</li>
-              <li>在任何应用中按下快捷键即可触发对应 Agent 和提示词的 AI 分析</li>
+              <li data-i18n="usage.step1">在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent</li>
+              <li data-i18n="usage.step2">在每个 Agent 的提示词胶囊中点击 ✏️ 图标设置快捷键</li>
+              <li data-i18n="usage.step3">通过胶囊右侧的开关 <strong>启用</strong> 该提示词的快捷键</li>
+              <li data-i18n="usage.step4">在任何应用中按下快捷键即可触发对应 Agent 和提示词的 AI 分析</li>
             </ol>
-            <p class="usage-note">提示：快捷键无需打开本窗口即可生效。同一快捷键被多个提示词使用时，仅最先注册的有效。</p>
+            <p class="usage-note" data-i18n="usage.note">提示：快捷键无需打开本窗口即可生效。同一快捷键被多个提示词使用时，仅最先注册的有效。</p>
           </div>
         </div>
       </section>
 
       <!-- Prompt Management Section -->
       <section class="prompts-section">
-        <h2>Prompt Management</h2>
+        <h2 data-i18n="prompt.title">提示词管理</h2>
 
         <div id="promptsList" class="prompts-list">
           <!-- Rendered by renderer.js -->
         </div>
 
         <div class="prompts-actions">
-          <button id="addPromptBtn" class="btn btn-sm btn-primary">+ Add</button>
+          <button id="addPromptBtn" class="btn btn-sm btn-primary" data-i18n="prompt.add">+ 添加</button>
         </div>
       </section>
 
       <!-- Agent Management Section -->
       <section class="agents-section">
-        <h2>AI Agent</h2>
+        <h2 data-i18n="agent.title">AI Agent</h2>
         <div class="agents-info">
-          <span class="help-text">Configure each agent's shortcut key. Press the shortcut to trigger that agent's service.</span>
+          <span class="help-text" data-i18n="agent.info">Configure each agent's shortcut key. Press the shortcut to trigger that agent's service.</span>
         </div>
         <div id="agentsList" class="agents-list">
           <!-- Rendered by renderer.js -->
@@ -56,34 +56,34 @@
 
       <!-- Configuration Section -->
       <section class="config-section">
-        <h2>⚙️ Configuration</h2>
+        <h2 data-i18n="config.title">⚙️ 配置</h2>
 
         <form id="configForm">
 
           <div class="form-group">
-            <label for="timeout">Timeout (seconds)</label>
+            <label for="timeout" data-i18n="config.timeout">超时（秒）</label>
             <input type="number" id="timeout" name="timeout_seconds" min="5" max="300" value="30">
           </div>
 
           <div class="form-group">
-            <label for="autoInsert">Output Destination</label>
+            <label for="autoInsert" data-i18n="config.outputDest">输出方式</label>
             <select id="autoInsert" name="auto_insert">
-              <option value="true">Auto insert at cursor</option>
-              <option value="false">Generate to clipboard</option>
+              <option value="true" data-i18n="config.outputAuto">Auto insert at cursor</option>
+              <option value="false" data-i18n="config.outputClipboard">Generate to clipboard</option>
             </select>
-            <span class="help-text">Auto insert: 自动粘贴到光标位置。Generate to clipboard: 复制到剪贴板，手动 Ctrl+V 粘贴。</span>
+            <span class="help-text" data-i18n="config.outputHelp">Auto insert: 自动粘贴到光标位置。Generate to clipboard: 复制到剪贴板，手动 Ctrl+V 粘贴。</span>
           </div>
 
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" id="showNotifications" name="show_notifications">
               <span class="checkmark"></span>
-              Show notifications
+              <span data-i18n="config.showNotifications">显示通知</span>
             </label>
           </div>
 
           <div class="form-group">
-            <label for="logLevel">Log Level</label>
+            <label for="logLevel" data-i18n="config.logLevel">日志级别</label>
             <select id="logLevel" name="log_level">
               <option value="error">Error</option>
               <option value="warn">Warning</option>
@@ -93,42 +93,50 @@
           </div>
 
           <div class="form-group">
-            <label for="responseMode">Capture Mode</label>
+            <label for="responseMode" data-i18n="config.captureMode">捕获模式</label>
             <select id="responseMode" name="response_mode">
-              <option value="sse-fetch">SSE Fetch (推荐，窗口关闭到托盘也能用)</option>
-              <option value="dom-poll">DOM Poll (豆包窗口需保持打开状态)</option>
+              <option value="sse-fetch" data-i18n="config.captureSSE">SSE Fetch（推荐，窗口关闭到托盘也能用）</option>
+              <option value="dom-poll" data-i18n="config.captureDOM">DOM Poll（豆包窗口需保持打开状态）</option>
             </select>
-            <span class="help-text">SSE Fetch 通过 CDP 拦截 AI 接口的 HTTP 流式响应来获取回复，不需要窗口保持可见。DOM Poll 通过页面 DOM 轮询获取回复，需要豆包窗口保持打开状态。</span>
+            <span class="help-text" data-i18n="config.captureHelp">SSE Fetch 通过 CDP 拦截 AI 接口的 HTTP 流式响应来获取回复，不需要窗口保持可见。DOM Poll 通过页面 DOM 轮询获取回复，需要豆包窗口保持打开状态。</span>
           </div>
 
           <div class="form-group">
-            <label for="outputMode">Output Mode</label>
+            <label for="outputMode" data-i18n="config.outputMode">输出模式</label>
             <select id="outputMode" name="output_mode">
-              <option value="streaming">Streaming (逐段流式粘贴)</option>
-              <option value="full">Full (完整获取后一次性粘贴)</option>
+              <option value="streaming" data-i18n="config.outputStream">Streaming（逐段流式粘贴）</option>
+              <option value="full" data-i18n="config.outputFull">Full（完整获取后一次性粘贴）</option>
             </select>
-            <span class="help-text">Streaming 将 AI 回复按生成顺序逐段粘贴到目标应用。Full 等待完整回复后一次性粘贴。</span>
+            <span class="help-text" data-i18n="config.outputModeHelp">Streaming 将 AI 回复按生成顺序逐段粘贴到目标应用。Full 等待完整回复后一次性粘贴。</span>
+          </div>
+
+          <div class="form-group">
+            <label for="language" data-i18n="config.language">语言</label>
+            <select id="language" name="language">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
           </div>
 
           <div class="form-actions">
-            <button type="button" id="resetBtn" class="btn btn-secondary">Reset to Defaults</button>
+            <button type="button" id="resetBtn" class="btn btn-secondary" data-i18n="config.reset">恢复默认设置</button>
           </div>
         </form>
       </section>
 
       <!-- Results Section -->
       <section class="results-section">
-        <h2>Last Result</h2>
+        <h2 data-i18n="result.title">最近结果</h2>
         <div id="resultContainer" class="result-container">
-          <p class="placeholder">No results yet. Trigger the assistant to see results here.</p>
+          <p class="placeholder" data-i18n="result.placeholder">暂无结果。触发助手后将在此显示结果。</p>
         </div>
       </section>
 
       <!-- Logs Section -->
       <section class="logs-section">
-        <h2>📝 Activity Log</h2>
+        <h2 data-i18n="log.title">📝 活动日志</h2>
         <div id="logContainer" class="log-container">
-          <p class="placeholder">Activity logs will appear here...</p>
+          <p class="placeholder" data-i18n="log.placeholder">活动日志将显示在此处...</p>
         </div>
       </section>
     </main>
@@ -141,13 +149,13 @@
   <!-- Shortcut Recorder Modal -->
   <div id="shortcutRecorderOverlay" class="recorder-overlay" style="display:none">
     <div class="recorder-modal">
-      <h3>设置快捷键</h3>
-      <p class="recorder-hint">请按下你的快捷键组合...</p>
+      <h3 data-i18n="shortcut.title">设置快捷键</h3>
+      <p class="recorder-hint" data-i18n="shortcut.hint">请按下你的快捷键组合...</p>
       <div class="recorder-display" id="recorderDisplay">—</div>
       <div class="recorder-status" id="recorderStatus"></div>
       <div class="recorder-actions">
-        <button id="recorderConfirm" class="btn btn-primary" disabled>确认</button>
-        <button id="recorderCancel" class="btn btn-secondary">取消</button>
+        <button id="recorderConfirm" class="btn btn-primary" disabled data-i18n="shortcut.confirm">确认</button>
+        <button id="recorderCancel" class="btn btn-secondary" data-i18n="shortcut.cancel">取消</button>
       </div>
     </div>
   </div>
@@ -155,20 +163,20 @@
   <!-- Prompt Editor Modal -->
   <div id="promptEditorOverlay" class="recorder-overlay" style="display:none">
     <div class="recorder-modal" style="min-width:500px;max-width:600px;">
-      <h3 id="promptEditorTitle">编辑提示词</h3>
+      <h3 id="promptEditorTitle" data-i18n="prompt.editTitle">编辑提示词</h3>
       <div class="form-group" style="text-align:left;margin-top:1rem;">
-        <label for="modalPromptName">Prompt Name</label>
-        <input type="text" id="modalPromptName" placeholder="e.g. Code Completion">
+        <label for="modalPromptName" data-i18n="prompt.nameLabel">提示词名称</label>
+        <input type="text" id="modalPromptName" data-i18n-placeholder="prompt.namePlaceholder" placeholder="例如：代码补全">
       </div>
       <div class="form-group" style="text-align:left;">
-        <label for="modalPromptContent">Prompt Content</label>
-        <textarea id="modalPromptContent" rows="8" placeholder="Enter your prompt text here..." style="width:100%;padding:0.75rem;border:1px solid var(--border-color);border-radius:6px;font-size:0.9rem;font-family:'Courier New',monospace;resize:vertical;box-sizing:border-box;"></textarea>
-        <span class="help-text">该提示词将作为完整指令发送给 AI，请编写明确、完整的提示内容。</span>
+        <label for="modalPromptContent" data-i18n="prompt.contentLabel">提示词内容</label>
+        <textarea id="modalPromptContent" rows="8" data-i18n-placeholder="prompt.contentPlaceholder" placeholder="在此输入提示词内容..." style="width:100%;padding:0.75rem;border:1px solid var(--border-color);border-radius:6px;font-size:0.9rem;font-family:'Courier New',monospace;resize:vertical;box-sizing:border-box;"></textarea>
+        <span class="help-text" data-i18n="prompt.contentHelp">该提示词将作为完整指令发送给 AI，请编写明确、完整的提示内容。</span>
       </div>
       <div class="form-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center;margin-top:1rem;">
-        <button id="modalSavePromptBtn" class="btn btn-primary">Save</button>
-        <button id="modalResetDefaultPromptBtn" class="btn btn-secondary" style="display:none;">恢复为内置默认值</button>
-        <button id="modalCancelPromptBtn" class="btn btn-secondary">Cancel</button>
+        <button id="modalSavePromptBtn" class="btn btn-primary" data-i18n="prompt.save">保存</button>
+        <button id="modalResetDefaultPromptBtn" class="btn btn-secondary" style="display:none;" data-i18n="prompt.resetDefault">恢复为内置默认值</button>
+        <button id="modalCancelPromptBtn" class="btn btn-secondary" data-i18n="prompt.cancel">取消</button>
       </div>
     </div>
   </div>
@@ -176,11 +184,11 @@
   <!-- Confirm Dialog Modal -->
   <div id="confirmDialogOverlay" class="recorder-overlay" style="display:none">
     <div class="recorder-modal" style="min-width:360px;">
-      <h3 id="confirmDialogTitle">确认</h3>
+      <h3 id="confirmDialogTitle" data-i18n="confirm.ok">确认</h3>
       <p id="confirmDialogMessage" style="margin:1rem 0;color:var(--text-secondary);"></p>
       <div class="recorder-actions">
-        <button id="confirmDialogOk" class="btn btn-primary">确认</button>
-        <button id="confirmDialogCancel" class="btn btn-secondary">取消</button>
+        <button id="confirmDialogOk" class="btn btn-primary" data-i18n="confirm.ok">确认</button>
+        <button id="confirmDialogCancel" class="btn btn-secondary" data-i18n="confirm.cancel">取消</button>
       </div>
     </div>
   </div>

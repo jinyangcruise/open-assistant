@@ -1,0 +1,145 @@
+{
+  "lang": "zh",
+  "title": "Open Assistant",
+  "subtitle": "AI 驱动的代码与文档补全助手",
+
+  "usage": {
+    "title": "使用说明",
+    "step1": "在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent",
+    "step2": "在每个 Agent 的提示词胶囊中点击 ✏️ 图标设置快捷键",
+    "step3": "通过胶囊右侧的开关 <strong>启用</strong> 该提示词的快捷键",
+    "step4": "在任何应用中按下快捷键即可触发对应 Agent 和提示词的 AI 分析",
+    "note": "快捷键无需打开本窗口即可生效。同一快捷键被多个提示词使用时，仅最先注册的有效。"
+  },
+
+  "prompt": {
+    "title": "提示词管理",
+    "add": "+ 添加",
+    "systemDefault": "系统默认",
+    "empty": "(空)",
+    "editTitle": "编辑提示词",
+    "editTitleDefault": "编辑默认提示词",
+    "newTitle": "新建提示词",
+    "nameLabel": "提示词名称",
+    "namePlaceholder": "例如：代码补全",
+    "contentLabel": "提示词内容",
+    "contentPlaceholder": "在此输入提示词内容...",
+    "contentHelp": "该提示词将作为完整指令发送给 AI，请编写明确、完整的提示内容。",
+    "save": "保存",
+    "cancel": "取消",
+    "resetDefault": "恢复为内置默认值",
+    "editBtnTitle": "编辑提示词",
+    "deleteBtnTitle": "删除提示词",
+    "deleteConfirmTitle": "删除提示词",
+    "deleteConfirmMsg": "确定要删除提示词 \"{name}\" 吗？",
+    "resetConfirmTitle": "恢复默认",
+    "resetConfirmMsg": "确定恢复为内置默认提示词？",
+    "nameRequired": "请输入提示词名称",
+    "contentRequired": "请输入提示词内容"
+  },
+
+  "agent": {
+    "title": "AI Agent",
+    "desktop": "桌面端",
+    "web": "网页",
+    "noAgents": "暂无 AI Agent 配置。",
+    "cdpLabel": "CDP Endpoint：",
+    "installLabel": "安装路径：",
+    "installPlaceholder": "留空则自动检测",
+    "test": "测试",
+    "promptsTitle": "提示词",
+    "shortcutUnset": "未设置",
+    "shortcutEditTitle": "设置快捷键",
+    "shortcutClearTitle": "清除快捷键",
+    "info": "配置每个 Agent 并为每个提示词设置快捷键。按下快捷键即可使用对应 Agent 和提示词触发 AI 分析。"
+  },
+
+  "config": {
+    "title": "⚙️ 配置",
+    "timeout": "超时（秒）",
+    "outputDest": "输出方式",
+    "outputAuto": "自动粘贴到光标位置",
+    "outputClipboard": "生成到剪贴板",
+    "outputHelp": "自动粘贴：将 AI 回复直接粘贴到光标位置。生成到剪贴板：复制到剪贴板，手动按 Ctrl+V 粘贴。",
+    "showNotifications": "显示通知",
+    "logLevel": "日志级别",
+    "captureMode": "捕获模式",
+    "captureSSE": "SSE Fetch（推荐，窗口关闭到托盘也能用）",
+    "captureDOM": "DOM Poll（豆包窗口需保持打开状态）",
+    "captureHelp": "SSE Fetch 通过 CDP 拦截 AI 接口的 HTTP 流式响应来获取回复，不需要窗口保持可见。DOM Poll 通过页面 DOM 轮询获取回复，需要豆包窗口保持打开状态。",
+    "outputMode": "输出模式",
+    "outputStream": "Streaming（逐段流式粘贴）",
+    "outputFull": "Full（完整获取后一次性粘贴）",
+    "outputModeHelp": "Streaming 将 AI 回复按生成顺序逐段粘贴到目标应用。Full 等待完整回复后一次性粘贴。",
+    "reset": "恢复默认设置",
+    "resetConfirmTitle": "重置设置",
+    "resetConfirmMsg": "确定要恢复所有设置为默认值吗？",
+    "language": "语言"
+  },
+
+  "result": {
+    "title": "最近结果",
+    "placeholder": "暂无结果。触发助手后将在此显示结果。",
+    "code": "💻 代码",
+    "document": "📄 文档",
+    "noContent": "无内容",
+    "generatedAt": "生成于 {time}"
+  },
+
+  "log": {
+    "title": "📝 活动日志",
+    "placeholder": "活动日志将显示在此处...",
+    "configUpdated": "配置已从托盘更新",
+    "appInitialized": "应用程序已初始化",
+    "configSaved": "配置已保存",
+    "configSaveFailed": "保存配置失败：{msg}",
+    "configReset": "设置已恢复为默认值",
+    "analysisComplete": "分析完成",
+    "analysisError": "错误：{msg}",
+    "promptDefaultUpdated": "默认提示词已更新",
+    "promptSaved": "提示词已保存：{name}",
+    "promptDeleted": "提示词已删除：{name}",
+    "installPathUpdated": "安装路径已更新：{agent}",
+    "installPathDetected": "自动检测到 {name} 的安装路径：{path}",
+    "endpointUpdated": "CDP Endpoint 已更新：{agent}",
+    "shortcutSaved": "快捷键已保存：{agent}/{prompt} = {shortcut}",
+    "shortcutCleared": "快捷键已清除：{agent} / {prompt}",
+    "promptEnabled": "已启用提示词：{prompt}（{agent}）",
+    "promptDisabled": "已禁用提示词：{prompt}（{agent}）",
+    "agentEnabled": "已启用 Agent：{name}",
+    "agentDisabled": "已禁用 Agent：{name}",
+    "agentToggleError": "切换 Agent 出错：{msg}",
+    "agentTesting": "正在测试 Agent 连接：{id}...",
+    "agentConnected": "Agent 已连接：{id}",
+    "agentFailed": "Agent 连接失败：{id} - {error}",
+    "agentTestError": "测试 Agent 连接出错：{msg}",
+    "promptDefaultReset": "默认提示词已恢复为内置值",
+    "selectedPrompt": "已选择提示词进行编辑：{name}",
+    "agentsLoadFailed": "加载 Agent 失败：{msg}"
+  },
+
+  "shortcut": {
+    "title": "设置快捷键",
+    "hint": "请按下你的快捷键组合...",
+    "continue": "继续按下其他键...",
+    "conflict": "⚠ 该快捷键可能被其他软件占用",
+    "save": "保存中...",
+    "confirm": "确认",
+    "cancel": "取消",
+    "saved": "快捷键已保存",
+    "error": "✗ {error}"
+  },
+
+  "confirm": {
+    "ok": "确认",
+    "cancel": "取消"
+  },
+
+  "status": {
+    "testing": "测试中...",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "error": "错误",
+    "testResult": "已连接（{title}）"
+  }
+}

@@ -4,6 +4,8 @@
 
 // State
 let config = {};
+let locale = {};
+let currentLang = 'zh';
 
 // DOM Elements
 const configForm = document.getElementById('configForm');
@@ -46,10 +48,58 @@ const confirmDialogMessage = document.getElementById('confirmDialogMessage');
 const confirmDialogOk = document.getElementById('confirmDialogOk');
 const confirmDialogCancel = document.getElementById('confirmDialogCancel');
 
+// ===== i18n =====
+
+async function loadLocale(lang) {
+  currentLang = lang || 'zh';
+  locale = await window.electronAPI.getLocale(currentLang);
+  applyTranslations();
+}
+
+function t(key, replacements) {
+  var keys = key.split('.');
+  var val = locale;
+  for (var i = 0; i < keys.length; i++) {
+    val = val ? val[keys[i]] : undefined;
+  }
+  if (val === undefined || val === null) return key;
+  if (!replacements) return val;
+  return val.replace(/\{(\w+)\}/g, function(_, k) {
+    return replacements[k] !== undefined ? replacements[k] : '{' + k + '}';
+  });
+}
+
+function applyTranslations() {
+  // data-i18n: innerHTML replacement
+  document.querySelectorAll('[data-i18n]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n');
+    if (key) el.innerHTML = t(key);
+  });
+  // data-i18n-placeholder: placeholder replacement
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-placeholder');
+    if (key) el.placeholder = t(key);
+  });
+  // data-i18n-title: title replacement
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-title');
+    if (key) el.title = t(key);
+  });
+  // data-i18n-value: value replacement (for option texts)
+  document.querySelectorAll('[data-i18n-value]').forEach(function(el) {
+    var key = el.getAttribute('data-i18n-value');
+    if (key) el.value = t(key);
+  });
+}
+
 // Initialize
 async function init() {
   // Load config
   config = await window.electronAPI.getConfig();
+
+  // Load locale
+  await loadLocale(config.language || 'zh');
+
   populateForm(config);
   
   // Setup event listeners
@@ -61,32 +111,48 @@ async function init() {
   window.electronAPI.onConfigUpdated(async (newConfig) => {
     config = newConfig;
     populateForm(config);
+    // Reload locale if language changed
+    if (newConfig.language && newConfig.language !== currentLang) {
+      await loadLocale(newConfig.language);
+    }
     await loadPrompts();
-    addLog('Configuration updated from tray', 'info');
+    addLog(t('log.configUpdated'), 'info');
   });
   
   // Load prompt management
   await loadPrompts();
 
-  addLog('Application initialized', 'info');
+  addLog(t('log.appInitialized'), 'info');
 }
 
 function setupEventListeners() {
-  // Auto-save on any form field change
+  // Auto-save on any form field change (except language - handled separately)
   const formInputs = configForm.querySelectorAll('input, select');
   for (const input of formInputs) {
+    if (input.id === 'language') continue;
     input.addEventListener('change', async () => {
       await saveConfig();
     });
   }
 
+  // Language selector: save + reload locale
+  document.getElementById('language').addEventListener('change', async function() {
+    var newLang = this.value;
+    await window.electronAPI.updateConfig({ language: newLang });
+    addLog(t('log.configSaved'), 'success');
+    await loadLocale(newLang);
+    // Re-render dynamic content
+    if (typeof prompts !== 'undefined') renderPrompts();
+    if (typeof agents !== 'undefined') await loadAgents();
+  });
+
   // Reset button
   resetBtn.addEventListener('click', async () => {
-    var confirmed = await showConfirmDialog('重置设置', '确定要恢复所有设置为默认值吗？');
+    var confirmed = await showConfirmDialog(t('config.resetConfirmTitle'), t('config.resetConfirmMsg'));
     if (!confirmed) return;
     config = await window.electronAPI.getConfig();
     populateForm(config);
-    addLog('Settings reset to defaults', 'info');
+    addLog(t('log.configReset'), 'info');
   });
 
   // Prompt management
@@ -111,13 +177,13 @@ function setupEventListeners() {
     if (e.target === this) hidePromptEditor();
   });
   modalResetDefaultPromptBtn.addEventListener('click', async function() {
-    var confirmed = await showConfirmDialog('恢复默认', '确定恢复为内置默认提示词？');
+    var confirmed = await showConfirmDialog(t('prompt.resetConfirmTitle'), t('prompt.resetConfirmMsg'));
     if (!confirmed) return;
     var result = await window.electronAPI.resetDefaultPrompt();
     modalPromptContent.value = result.defaultPrompt;
     defaultPromptText = result.defaultPrompt;
     renderPrompts();
-    addLog('默认提示词已恢复为内置值', 'info');
+    addLog(t('log.promptDefaultReset'), 'info');
   });
 
   // Confirm dialog modal events
@@ -146,9 +212,9 @@ async function saveConfig() {
   
   try {
     config = await window.electronAPI.updateConfig(updates);
-    addLog('Configuration saved', 'success');
+    addLog(t('log.configSaved'), 'success');
   } catch (error) {
-    addLog(`Failed to save config: ${error.message}`, 'error');
+    addLog(t('log.configSaveFailed', { msg: error.message }), 'error');
   }
 }
 
@@ -159,29 +225,30 @@ function populateForm(config) {
   document.getElementById('logLevel').value = config.log_level || 'info';
   document.getElementById('responseMode').value = config.response_mode || 'sse-fetch';
   document.getElementById('outputMode').value = config.output_mode || 'streaming';
+  document.getElementById('language').value = config.language || 'zh';
 }
 
 function handleAnalysisResult(result) {
-  addLog('Analysis complete', 'success');
+  addLog(t('log.analysisComplete'), 'success');
   displayResult(result);
 }
 
 function handleError(error) {
-  addLog(`Error: ${error}`, 'error');
+  addLog(t('log.analysisError', { msg: error }), 'error');
 }
 
 function displayResult(result) {
   const resultCard = document.createElement('div');
   resultCard.className = 'result-card';
-  
-  const typeLabel = result.type === 'code' ? '💻 Code' : '📄 Document';
-  const typeClass = result.type;
-  
+
+  var typeLabel = result.type === 'code' ? t('result.code') : t('result.document');
+  var typeClass = result.type;
+
   resultCard.innerHTML = `
     <div class="result-type ${typeClass}">${typeLabel}</div>
-    <div class="result-text">${escapeHtml(result.text || 'No content')}</div>
+    <div class="result-text">${escapeHtml(result.text || t('result.noContent'))}</div>
     <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
-      Generated at ${new Date(result.timestamp).toLocaleString()}
+      ${t('result.generatedAt', { time: new Date(result.timestamp).toLocaleString() })}
     </div>
   `;
   
@@ -254,24 +321,24 @@ function renderPrompts() {
   promptsList.innerHTML = '';
 
   // System default prompt (always first, built-in)
-  var preview = defaultPromptText ? defaultPromptText.substring(0, 60).replace(/\n/g, ' ') : '(empty)';
+  var preview = defaultPromptText ? defaultPromptText.substring(0, 60).replace(/\n/g, ' ') : t('prompt.empty');
   if (defaultPromptText && defaultPromptText.length > 60) preview += '...';
   var defaultItem = document.createElement('div');
   defaultItem.className = 'prompt-item';
   defaultItem.innerHTML =
     '<div class="prompt-item-info">' +
-    '  <div class="prompt-item-name">System Default</div>' +
-    '  <div class="prompt-item-preview">' + (defaultPromptText ? escapeHtml(preview) : '(empty)') + '</div>' +
+    '  <div class="prompt-item-name">' + t('prompt.systemDefault') + '</div>' +
+    '  <div class="prompt-item-preview">' + (defaultPromptText ? escapeHtml(preview) : t('prompt.empty')) + '</div>' +
     '</div>' +
     '<div class="prompt-item-actions">' +
-    '  <button class="prompt-item-btn edit-btn" title="编辑提示词">✏️</button>' +
+    '  <button class="prompt-item-btn edit-btn" title="' + t('prompt.editBtnTitle') + '">✏️</button>' +
     '</div>';
 
   // Edit System Default
   var editDefaultBtn = defaultItem.querySelector('.edit-btn');
   editDefaultBtn.addEventListener('click', function(e) {
     e.stopPropagation();
-    showPromptEditor({ id: 'system-default', name: 'System Default', content: defaultPromptText });
+    showPromptEditor({ id: 'system-default', name: t('prompt.systemDefault'), content: defaultPromptText });
   });
 
   promptsList.appendChild(defaultItem);
@@ -279,7 +346,7 @@ function renderPrompts() {
   // User-defined prompts
   for (var i = 0; i < prompts.length; i++) {
     var p = prompts[i];
-    var preview = p.content ? p.content.substring(0, 60).replace(/\n/g, ' ') : '(empty)';
+    var preview = p.content ? p.content.substring(0, 60).replace(/\n/g, ' ') : t('prompt.empty');
     if (p.content && p.content.length > 60) preview += '...';
 
     var item = document.createElement('div');
@@ -290,8 +357,8 @@ function renderPrompts() {
       '  <div class="prompt-item-preview">' + escapeHtml(preview) + '</div>' +
       '</div>' +
       '<div class="prompt-item-actions">' +
-      '  <button class="prompt-item-btn edit-btn" title="编辑提示词">✏️</button>' +
-      '  <button class="prompt-item-btn delete-btn" title="删除提示词">🗑️</button>' +
+      '  <button class="prompt-item-btn edit-btn" title="' + t('prompt.editBtnTitle') + '">✏️</button>' +
+      '  <button class="prompt-item-btn delete-btn" title="' + t('prompt.deleteBtnTitle') + '">🗑️</button>' +
       '</div>';
 
     // Edit button
@@ -305,13 +372,13 @@ function renderPrompts() {
     var deleteBtn = item.querySelector('.delete-btn');
     deleteBtn.addEventListener('click', async function(e) {
       e.stopPropagation();
-      var confirmed = await showConfirmDialog('删除提示词', '确定要删除提示词 "' + p.name + '" 吗？');
+      var confirmed = await showConfirmDialog(t('prompt.deleteConfirmTitle'), t('prompt.deleteConfirmMsg', { name: p.name }));
       if (!confirmed) return;
       var result = await window.electronAPI.deletePrompt(p.id);
       prompts = result.prompts;
       selectedPromptId = result.selectedId;
       renderPrompts();
-      addLog('Deleted prompt: ' + p.name, 'info');
+      addLog(t('log.promptDeleted', { name: p.name }), 'info');
     });
 
     promptsList.appendChild(item);
@@ -321,7 +388,7 @@ function renderPrompts() {
 function showPromptEditor(prompt) {
   modalPromptName.disabled = false;
   if (prompt) {
-    promptEditorTitle.textContent = prompt.id === 'system-default' ? '编辑默认提示词' : '编辑提示词';
+    promptEditorTitle.textContent = prompt.id === 'system-default' ? t('prompt.editTitleDefault') : t('prompt.editTitle');
     modalPromptName.value = prompt.name || '';
     modalPromptContent.value = prompt.content || '';
     editingPromptId = prompt.id;
@@ -329,7 +396,7 @@ function showPromptEditor(prompt) {
     if (prompt.id === 'system-default') modalPromptName.disabled = true;
     modalResetDefaultPromptBtn.style.display = prompt.id === 'system-default' ? 'inline-block' : 'none';
   } else {
-    promptEditorTitle.textContent = '新建提示词';
+    promptEditorTitle.textContent = t('prompt.newTitle');
     modalPromptName.value = '';
     modalPromptContent.value = '';
     editingPromptId = null;
@@ -372,7 +439,7 @@ async function savePrompt() {
     defaultPromptText = result.defaultPrompt;
     hidePromptEditor();
     renderPrompts();
-    addLog('默认提示词已更新', 'success');
+    addLog(t('log.promptDefaultUpdated'), 'success');
     return;
   }
 
@@ -387,7 +454,7 @@ async function savePrompt() {
   hidePromptEditor();
   renderPrompts();
 
-  addLog('Prompt saved: ' + name, 'success');
+  addLog(t('log.promptSaved', { name: name }), 'success');
 }
 
 // ===== Confirm Dialog =====
@@ -450,7 +517,7 @@ async function loadAgents() {
           var detectResult = await window.electronAPI.detectInstallPath(a.id);
           if (detectResult && detectResult.path) {
             await window.electronAPI.updateAgentConfig(a.id, { install_path: detectResult.path });
-            addLog('Auto-detected install path for ' + a.name + ': ' + detectResult.path, 'info');
+            addLog(t('log.installPathDetected', { name: a.name, path: detectResult.path }), 'info');
           }
         } catch (detectError) {
           // Silently ignore detection failures
@@ -466,7 +533,7 @@ async function loadAgents() {
       renderAgents();
     }
   } catch (error) {
-    addLog('Failed to load agents: ' + error.message, 'error');
+    addLog(t('log.agentsLoadFailed', { msg: error.message }), 'error');
   }
 }
 
@@ -474,7 +541,7 @@ function renderAgents() {
   agentsList.innerHTML = '';
 
   if (agents.length === 0) {
-    agentsList.innerHTML = '<p class="placeholder">No AI Agents configured.</p>';
+    agentsList.innerHTML = '<p class="placeholder">' + t('agent.noAgents') + '</p>';
     return;
   }
 
@@ -487,7 +554,7 @@ function renderAgents() {
     item.className = 'agent-item' + (isSelected ? ' selected' : '');
     item.dataset.agentId = a.id;
 
-    var typeLabel = a.type === 'electron' ? 'Desktop' : 'Web';
+    var typeLabel = a.type === 'electron' ? t('agent.desktop') : t('agent.web');
 
     item.innerHTML =
       '<div class="agent-item-checkbox">' +
@@ -501,19 +568,19 @@ function renderAgents() {
       '  </div>' +
       '  <div class="agent-item-status" id="agent-status-' + a.id + '"></div>' +
       '  <div class="agent-endpoint-row">' +
-      '    <label class="agent-endpoint-label">CDP Endpoint:</label>' +
+      '    <label class="agent-endpoint-label">' + t('agent.cdpLabel') + '</label>' +
       '    <input type="text" class="agent-endpoint-input" data-agent-id="' + a.id + '" ' +
       '      value="' + escapeHtml(a.endpoint) + '" />' +
-      '    <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">Test</button>' +
+      '    <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">' + t('agent.test') + '</button>' +
       '  </div>' +
       '  <div class="agent-install-path">' +
-      '    <label class="install-path-label">Install Path:</label>' +
+      '    <label class="install-path-label">' + t('agent.installLabel') + '</label>' +
       '    <input type="text" class="install-path-input" data-agent-id="' + a.id + '" ' +
       '      value="' + escapeHtml(a.installPath || '') + '" ' +
-      '      placeholder="Leave empty for auto-detect" />' +
+      '      placeholder="' + t('agent.installPlaceholder') + '" />' +
       '  </div>' +
       '  <div class="agent-prompts-section">' +
-      '    <div class="agent-prompts-title">Prompts</div>' +
+      '    <div class="agent-prompts-title">' + t('agent.promptsTitle') + '</div>' +
       '    <div class="agent-prompts-list" id="prompts-list-' + a.id + '">' +
       '    </div>' +
       '  </div>' +
@@ -539,7 +606,7 @@ function renderAgents() {
         e.stopPropagation();
         var value = this.value.trim();
         await window.electronAPI.updateAgentConfig(agentId, { install_path: value });
-        addLog('Install path updated for ' + agentId, 'info');
+        addLog(t('log.installPathUpdated', { agent: agentId }), 'info');
       });
       input.addEventListener('blur', async function(e) {
         e.stopPropagation();
@@ -554,7 +621,7 @@ function renderAgents() {
         e.stopPropagation();
         var value = this.value.trim();
         await window.electronAPI.updateAgentConfig(agentId, { endpoint: value });
-        addLog('CDP Endpoint updated for ' + agentId, 'info');
+        addLog(t('log.endpointUpdated', { agent: agentId }), 'info');
       });
       input.addEventListener('blur', async function(e) {
         e.stopPropagation();
@@ -594,17 +661,17 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
 
     var shortcutDisplay = shortcut
       ? '<span class="capsule-shortcut-text">' + escapeHtml(shortcut.replace('Control', 'Ctrl')) + '</span>'
-      : '<span class="capsule-shortcut-unset">未设置</span>';
+      : '<span class="capsule-shortcut-unset">' + t('agent.shortcutUnset') + '</span>';
 
     var clearBtnHtml = shortcut
-      ? '<button class="capsule-clear-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="清除快捷键">✕</button>'
+      ? '<button class="capsule-clear-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutClearTitle') + '">✕</button>'
       : '';
 
     capsule.innerHTML =
       '<div class="prompt-capsule-name" title="' + escapeHtml(promptName) + '">' + escapeHtml(promptName) + '</div>' +
       '<div class="prompt-capsule-shortcut">' +
             shortcutDisplay +
-      '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="设置快捷键">✏️</button>' +
+      '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutEditTitle') + '">✏️</button>' +
             clearBtnHtml +
       '</div>' +
       '<button class="prompt-capsule-toggle" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '">' +
@@ -626,7 +693,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
       clearBtn.addEventListener('click', async function(e) {
         e.stopPropagation();
         await window.electronAPI.savePromptShortcut(agent.id, promptId, '');
-        addLog('Shortcut cleared for ' + agent.name + ' / ' + promptName, 'info');
+        addLog(t('log.shortcutCleared', { agent: agent.name, prompt: promptName }), 'info');
         await loadAgents();
       });
     }
@@ -637,7 +704,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
       e.stopPropagation();
       var newEnabled = !enabled;
       await window.electronAPI.setPromptEnabled(agent.id, promptId, newEnabled);
-      addLog((newEnabled ? 'Enabled' : 'Disabled') + ' prompt: ' + promptName + ' for ' + agent.name, 'info');
+      addLog(t(newEnabled ? 'log.promptEnabled' : 'log.promptDisabled', { prompt: promptName, agent: agent.name }), 'info');
       // Reload agents to reflect changes
       await loadAgents();
     });
@@ -646,7 +713,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
   }
 
   // System Default prompt (always first)
-  listEl.appendChild(createCapsule('system-default', 'System Default'));
+  listEl.appendChild(createCapsule('system-default', t('prompt.systemDefault')));
 
   // User-defined prompts
   for (var j = 0; j < prompts.length; j++) {
@@ -663,9 +730,9 @@ async function toggleAgent(id) {
     // Simpler approach: just reload agents
     await loadAgents();
     var found = agents.find(function(a) { return a.id === id; });
-    addLog((result.selected ? 'Enabled' : 'Disabled') + ' agent: ' + (found ? found.name : id), 'info');
+    addLog(t(result.selected ? 'log.agentEnabled' : 'log.agentDisabled', { name: found ? found.name : id }), 'info');
   } catch (error) {
-    addLog('Error toggling agent: ' + error.message, 'error');
+    addLog(t('log.agentToggleError', { msg: error.message }), 'error');
   }
 }
 
@@ -673,32 +740,32 @@ async function testAgentConnection(id) {
   var statusEl = document.getElementById('agent-status-' + id);
   if (statusEl) {
     statusEl.className = 'agent-item-status testing';
-    statusEl.textContent = 'Testing...';
+    statusEl.textContent = t('status.testing');
   }
 
-  addLog('Testing connection for agent: ' + id + '...', 'info');
+  addLog(t('log.agentTesting', { id: id }), 'info');
 
   try {
     var result = await window.electronAPI.testAgentConnection(id);
     if (result.success) {
       if (statusEl) {
         statusEl.className = 'agent-item-status connected';
-        statusEl.textContent = 'Connected' + (result.title ? ' (' + result.title + ')' : '');
+        statusEl.textContent = result.title ? t('status.testResult', { title: result.title }) : t('status.connected');
       }
-      addLog('Agent connected: ' + id, 'success');
+      addLog(t('log.agentConnected', { id: id }), 'success');
     } else {
       if (statusEl) {
         statusEl.className = 'agent-item-status disconnected';
-        statusEl.textContent = 'Disconnected';
+        statusEl.textContent = t('status.disconnected');
       }
-      addLog('Agent connection failed: ' + id + ' - ' + (result.error || 'Unknown error'), 'error');
+      addLog(t('log.agentFailed', { id: id, error: result.error || 'Unknown error' }), 'error');
     }
   } catch (error) {
     if (statusEl) {
       statusEl.className = 'agent-item-status disconnected';
-      statusEl.textContent = 'Error';
+      statusEl.textContent = t('status.error');
     }
-    addLog('Error testing agent connection: ' + error.message, 'error');
+    addLog(t('log.agentTestError', { msg: error.message }), 'error');
   }
 }
 
@@ -794,7 +861,7 @@ function showShortcutRecorder(agentId, promptId) {
       if (e.altKey) modParts.push('Alt');
       if (e.metaKey) modParts.push('Cmd');
       display.textContent = modParts.join('+');
-      status.textContent = '继续按下其他键...';
+      status.textContent = t('shortcut.continue');
       status.className = 'recorder-status hint';
       return;
     }
@@ -810,7 +877,7 @@ function showShortcutRecorder(agentId, promptId) {
         status.textContent = '';
         status.className = 'recorder-status';
       } else {
-        status.textContent = '⚠ 该快捷键可能被其他软件占用';
+        status.textContent = t('shortcut.conflict');
         status.className = 'recorder-status warning';
       }
       confirmBtn.disabled = false;
@@ -839,18 +906,18 @@ async function confirmShortcut() {
   var confirmBtn = document.getElementById('recorderConfirm');
   var status = document.getElementById('recorderStatus');
   confirmBtn.disabled = true;
-  status.textContent = '保存中...';
+  status.textContent = t('shortcut.save');
   status.className = 'recorder-status';
 
   var result = await window.electronAPI.savePromptShortcut(recorderAgentId, recorderPromptId, recorderShortcut);
 
   if (result.success) {
-    addLog('Shortcut saved for ' + recorderAgentId + '/' + recorderPromptId + ': ' + recorderShortcut, 'success');
+    addLog(t('log.shortcutSaved', { agent: recorderAgentId, prompt: recorderPromptId, shortcut: recorderShortcut }), 'success');
     hideShortcutRecorder();
     // Reload agents to update display
     await loadAgents();
   } else if (result.error) {
-    status.textContent = '✗ ' + result.error;
+    status.textContent = t('shortcut.error', { error: result.error });
     status.className = 'recorder-status error';
     confirmBtn.disabled = false;
   }

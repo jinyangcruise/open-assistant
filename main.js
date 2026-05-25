@@ -874,6 +874,19 @@ function setupIpcHandlers() {
     shell.openExternal(url);
   });
 
+  // Load locale file
+  ipcMain.handle('get-locale', (event, lang) => {
+    const fs = require('fs');
+    const localePath = path.join(__dirname, 'locales', lang + '.json');
+    // Fallback to zh if requested locale not found
+    const finalPath = fs.existsSync(localePath) ? localePath : path.join(__dirname, 'locales', 'zh.json');
+    try {
+      return JSON.parse(fs.readFileSync(finalPath, 'utf-8'));
+    } catch (e) {
+      return {};
+    }
+  });
+
 }
 
 // App lifecycle
