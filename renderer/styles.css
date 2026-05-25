@@ -30,12 +30,12 @@ body {
 
 /* Fade-in animation */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .animate-in {
-  animation: fadeInUp 0.2s ease-out;
+  animation: fadeInUp 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .app {
@@ -143,37 +143,39 @@ body {
   overflow-y: auto;
 }
 
-/* ===== Settings Tabs ===== */
+/* ===== Settings & History Tabs (Capsule Style) ===== */
 .settings-tabs {
   display: flex;
-  border-bottom: 1px solid var(--border-color);
+  gap: 0.35rem;
   background: var(--card-bg);
   flex-shrink: 0;
-  padding: 0 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tab-btn {
-  padding: 0.65rem 1.2rem;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-family: inherit;
   color: var(--text-secondary);
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .tab-btn:hover {
+  background: #f1f5f9;
   color: var(--text-color);
-  background: #f9fafb;
+  border-color: var(--border-color);
 }
 
 .tab-btn.active {
-  color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
-  font-weight: 600;
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
 }
 
 .tab-content {
