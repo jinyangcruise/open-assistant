@@ -21,6 +21,7 @@ const DoubaoAppAdapter = require('./core/agent-manager/agents/doubao-app-adapter
 // Initialize store for persistent config
 const store = new Store({
   name: 'opencli-assistant-config',
+  cwd: path.join(app.getPath('appData'), 'OpenAssistant'),
   defaults: require('./config.json')
 });
 

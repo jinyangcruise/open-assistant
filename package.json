@@ -47,7 +47,8 @@
       "renderer/**/*",
       "overlay/**/*",
       "config.json",
-      "assets/**/*"
+      "assets/**/*",
+      "locales/**/*"
     ],
     "win": {
       "target": [
