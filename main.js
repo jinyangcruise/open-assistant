@@ -483,9 +483,6 @@ async function handleShortcut(agentId, promptId) {
     // Update tray menu
     updateTrayStatus('Processing...');
 
-    // Show notification
-    showNotification('Open Assistant', 'Analyzing screen...');
-
     // 1. Detect active window
     const activeWindow = detectActiveWindow();
     console.log('Active window:', activeWindow);
@@ -586,18 +583,14 @@ async function handleShortcut(agentId, promptId) {
         if (!result.text) {
           console.warn('[Streaming] Empty analysis result');
         }
-
-        showNotification('Success', 'Text inserted successfully');
       } else if (outputMode === 'full') {
         // Full output: paste complete text at once
         await pasteText(result.text);
         console.log('Full paste completed');
-        showNotification('Success', 'Text inserted successfully');
       }
     } else {
       // Copy to clipboard for manual paste
       clipboard.writeText(result.text);
-      showNotification('Copied to Clipboard', 'Press Ctrl+V to paste');
     }
 
     // Send result to renderer

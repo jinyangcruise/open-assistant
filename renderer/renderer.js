@@ -242,18 +242,18 @@ function setupEventListeners() {
 async function saveConfig() {
   const formData = new FormData(configForm);
   const updates = {};
-  
+
   for (const [key, value] of formData.entries()) {
     if (key === 'auto_insert') {
       updates[key] = value === 'true';
-    } else if (key === 'show_notifications') {
-      updates[key] = formData.get(key) === 'on';
     } else if (key === 'timeout_seconds') {
       updates[key] = parseInt(value, 10);
     } else {
       updates[key] = value;
     }
   }
+  // Checkbox values are not included in FormData when unchecked, read them directly
+  updates['show_notifications'] = document.getElementById('showNotifications').checked;
   
   try {
     config = await window.electronAPI.updateConfig(updates);
