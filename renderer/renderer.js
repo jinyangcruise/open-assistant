@@ -111,6 +111,20 @@ async function init() {
   // Load locale
   await loadLocale(config.language || 'zh');
 
+  // Sync default prompt to match current language on first load
+  var builtinPrompt = locale.defaultPrompt || '';
+  if (builtinPrompt) {
+    var currentDefault = config.default_prompt || '';
+    var zhBuiltin = '我发送了一张屏幕截图';
+    var enBuiltin = 'I have sent a screenshot';
+    if (currentDefault.indexOf(zhBuiltin) === 0 || currentDefault.indexOf(enBuiltin) === 0 || !currentDefault) {
+      if (currentDefault !== builtinPrompt) {
+        config = await window.electronAPI.updateConfig({ default_prompt: builtinPrompt });
+        defaultPromptText = builtinPrompt;
+      }
+    }
+  }
+
   populateForm(config);
   
   // Setup event listeners
@@ -154,6 +168,18 @@ function setupEventListeners() {
       addLog(t('log.configSaved'), 'success');
       await loadLocale(newLang);
       updateLangButtons(newLang);
+      // Update default prompt to match new language
+      var newDefaultPrompt = locale.defaultPrompt || '';
+      if (newDefaultPrompt) {
+        var currentDefault = config.default_prompt || '';
+        var zhBuiltin = '我发送了一张屏幕截图';
+        var enBuiltin = 'I have sent a screenshot';
+        // Only auto-update if user hasn't customized
+        if (currentDefault.indexOf(zhBuiltin) === 0 || currentDefault.indexOf(enBuiltin) === 0 || !currentDefault) {
+          await window.electronAPI.updateDefaultPrompt(newDefaultPrompt);
+          defaultPromptText = newDefaultPrompt;
+        }
+      }
       // Re-render dynamic content
       if (typeof prompts !== 'undefined') renderPrompts();
       if (typeof agents !== 'undefined') await loadAgents();
@@ -193,7 +219,7 @@ function setupEventListeners() {
   modalResetDefaultPromptBtn.addEventListener('click', async function() {
     var confirmed = await showConfirmDialog(t('prompt.resetConfirmTitle'), t('prompt.resetConfirmMsg'));
     if (!confirmed) return;
-    var result = await window.electronAPI.resetDefaultPrompt();
+    var result = await window.electronAPI.resetDefaultPrompt(currentLang);
     modalPromptContent.value = result.defaultPrompt;
     defaultPromptText = result.defaultPrompt;
     renderPrompts();
@@ -375,24 +401,26 @@ function renderPrompts() {
       '</div>';
 
     // Edit button
-    var editBtn = item.querySelector('.edit-btn');
-    editBtn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      showPromptEditor(p);
-    });
+    (function(prompt) {
+      var editBtn = item.querySelector('.edit-btn');
+      editBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showPromptEditor(prompt);
+      });
 
-    // Delete button
-    var deleteBtn = item.querySelector('.delete-btn');
-    deleteBtn.addEventListener('click', async function(e) {
-      e.stopPropagation();
-      var confirmed = await showConfirmDialog(t('prompt.deleteConfirmTitle'), t('prompt.deleteConfirmMsg', { name: p.name }));
-      if (!confirmed) return;
-      var result = await window.electronAPI.deletePrompt(p.id);
-      prompts = result.prompts;
-      selectedPromptId = result.selectedId;
-      renderPrompts();
-      addLog(t('log.promptDeleted', { name: p.name }), 'info');
-    });
+      // Delete button
+      var deleteBtn = item.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        var confirmed = await showConfirmDialog(t('prompt.deleteConfirmTitle'), t('prompt.deleteConfirmMsg', { name: prompt.name }));
+        if (!confirmed) return;
+        var result = await window.electronAPI.deletePrompt(prompt.id);
+        prompts = result.prompts;
+        selectedPromptId = result.selectedId;
+        renderPrompts();
+        addLog(t('log.promptDeleted', { name: prompt.name }), 'info');
+      });
+    })(p);
 
     promptsList.appendChild(item);
   }

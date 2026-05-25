@@ -218,7 +218,13 @@ function createTray() {
 }
 
 // Built-in default prompt (used for reset functionality)
-const BUILTIN_DEFAULT_PROMPT = '我发送了一张屏幕截图，请分析截图中的内容，并提供智能补全建议。\n\n当前应用: {app}\n\n要求：\n\n1. 判断我正在做什么（写代码/写文档/其他）\n2. 如果是代码，识别编程语言和上下文\n3. 根据上下文，提供智能补全建议\n4. 只返回补全内容，不要解释\n5. 保持代码格式和缩进\n6. 根据用户使用的编程语言和工具，使用正确的缩进方式（空格/制表符）\n7. 不要重复用户已有的内容，例如用户写的注释\n\n请直接分析屏幕截图并返回补全建议：';
+const BUILTIN_DEFAULT_PROMPT_ZH = '我发送了一张屏幕截图，请分析截图中的内容，并提供智能补全建议。\n\n当前应用: {app}\n\n要求：\n\n1. 判断我正在做什么（写代码/写文档/其他）\n2. 如果是代码，识别编程语言和上下文\n3. 根据上下文，提供智能补全建议\n4. 只返回补全内容，不要解释\n5. 保持代码格式和缩进\n6. 根据用户使用的编程语言和工具，使用正确的缩进方式（空格/制表符）\n7. 不要重复用户已有的内容，例如用户写的注释\n\n请直接分析屏幕截图并返回补全建议：';
+
+const BUILTIN_DEFAULT_PROMPT_EN = 'I have sent a screenshot. Please analyze the content and provide smart completion suggestions.\n\nCurrent app: {app}\n\nRequirements:\n\n1. Determine what I am doing (writing code / writing documents / other)\n2. If it\'s code, identify the programming language and context\n3. Based on the context, provide smart completion suggestions\n4. Only return the completion content, do not explain\n5. Maintain code formatting and indentation\n6. Use the correct indentation (spaces/tabs) based on the programming language and tools\n7. Do not repeat existing content the user has already written, such as user\'s comments\n\nPlease directly analyze the screenshot and return completion suggestions:';
+
+function getBuiltinDefaultPrompt(lang) {
+  return lang === 'en' ? BUILTIN_DEFAULT_PROMPT_EN : BUILTIN_DEFAULT_PROMPT_ZH;
+}
 
 // Simple locale loader for tray menu (main process)
 let _trayLocale = {};
@@ -738,11 +744,12 @@ function setupIpcHandlers() {
   });
 
   // Reset default prompt to built-in
-  ipcMain.handle('reset-default-prompt', () => {
-    store.set('default_prompt', BUILTIN_DEFAULT_PROMPT);
+  ipcMain.handle('reset-default-prompt', (event, lang) => {
+    var prompt = getBuiltinDefaultPrompt(lang || store.get('language') || 'zh');
+    store.set('default_prompt', prompt);
     rebuildTrayMenu();
     notifyConfigUpdated();
-    return { success: true, defaultPrompt: BUILTIN_DEFAULT_PROMPT };
+    return { success: true, defaultPrompt: prompt };
   });
 
   // --- Agent Management ---

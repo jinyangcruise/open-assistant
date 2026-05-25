@@ -150,5 +150,7 @@
     "clipboard": "Clipboard",
     "initAgent": "Initialize {name}",
     "quit": "Quit"
-  }
+  },
+
+  "defaultPrompt": "I have sent a screenshot. Please analyze the content and provide smart completion suggestions.\n\nCurrent app: {app}\n\nRequirements:\n\n1. Determine what I am doing (writing code / writing documents / other)\n2. If it's code, identify the programming language and context\n3. Based on the context, provide smart completion suggestions\n4. Only return the completion content, do not explain\n5. Maintain code formatting and indentation\n6. Use the correct indentation (spaces/tabs) based on the programming language and tools\n7. Do not repeat existing content the user has already written, such as user's comments\n\nPlease directly analyze the screenshot and return completion suggestions:"
 }
