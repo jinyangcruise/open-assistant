@@ -68,6 +68,11 @@
     "outputClipboard": "Generate to clipboard",
     "outputHelp": "Auto insert: automatically pastes to your cursor. Generate to clipboard: copies to clipboard, press Ctrl+V to paste manually.",
     "showNotifications": "Show notifications",
+    "showNotificationsHelp": "Show system notifications on errors or timeouts during AI analysis.",
+    "autoLaunch": "Launch at system startup",
+    "autoLaunchHelp": "Automatically launch Open Assistant when you log in to Windows.",
+    "quietStart": "Start silently",
+    "quietStartHelp": "Minimize to system tray on startup without showing the main window.",
     "logLevel": "Log Level",
     "captureMode": "Capture Mode",
     "captureSSE": "SSE Fetch (recommended, works when minimized to tray)",
@@ -81,9 +86,8 @@
     "resetConfirmTitle": "Reset Settings",
     "resetConfirmMsg": "Are you sure you want to reset all settings to defaults?",
     "language": "Language",
-    "autoLaunch": "Launch at system startup",
-    "quietStart": "Start silently (minimize to tray)",
-    "autoInitAgent": "Initialize Doubao on startup"
+    "autoInitAgent": "Initialize Doubao on startup",
+    "autoInitAgentHelp": "If Doubao is already responding at the configured CDP Endpoint, startup will be skipped."
   },
 
   "about": {

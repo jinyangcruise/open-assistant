@@ -451,8 +451,9 @@ kbd {
 
 .checkbox-group {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
 }
 
 .checkbox-label {
@@ -461,6 +462,7 @@ kbd {
   gap: 0.5rem;
   cursor: pointer;
   font-weight: normal;
+  flex-shrink: 0;
 }
 
 .checkbox-label input[type="checkbox"] {

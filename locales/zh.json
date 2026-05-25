@@ -69,6 +69,7 @@
     "outputClipboard": "生成到剪贴板",
     "outputHelp": "自动粘贴：将 AI 回复直接粘贴到光标位置。生成到剪贴板：复制到剪贴板，手动按 Ctrl+V 粘贴。",
     "showNotifications": "显示通知",
+    "showNotificationsHelp": "AI 分析出错或超时时显示系统通知。",
     "logLevel": "日志级别",
     "captureMode": "捕获模式",
     "captureSSE": "SSE Fetch（推荐，窗口关闭到托盘也能用）",
@@ -83,8 +84,11 @@
     "resetConfirmMsg": "确定要恢复所有设置为默认值吗？",
     "language": "语言",
     "autoLaunch": "开机启动",
-    "quietStart": "静默启动（启动时隐藏到托盘）",
-    "autoInitAgent": "启动时初始化豆包"
+    "autoLaunchHelp": "随系统启动自动运行 Open Assistant。",
+    "quietStart": "静默启动",
+    "quietStartHelp": "启动时隐藏到系统托盘，不显示主窗口。",
+    "autoInitAgent": "启动时初始化豆包",
+    "autoInitAgentHelp": "如豆包已在当前配置的 CDP Endpoint 响应，启动时会自动跳过。"
   },
 
   "about": {

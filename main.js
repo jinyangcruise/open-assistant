@@ -273,6 +273,24 @@ function applyAutoLaunch(enabled) {
   }
 }
 
+// Check if an HTTP endpoint is reachable (e.g. CDP endpoint already running)
+function isEndpointReachable(endpointUrl) {
+  return new Promise(function(resolve) {
+    try {
+      var urlObj = new URL(endpointUrl);
+      var http = require('http');
+      var req = http.get(endpointUrl.replace(/\/$/, '') + '/json', function(res) {
+        resolve(res.statusCode === 200);
+        res.resume();
+      });
+      req.on('error', function() { resolve(false); });
+      req.setTimeout(3000, function() { req.destroy(); resolve(false); });
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
 // Build or rebuild the tray context menu from current config
 function rebuildTrayMenu() {
   if (!tray) return;
@@ -1007,11 +1025,17 @@ app.whenReady().then(() => {
     applyAutoLaunch(true);
   }
 
-  // Auto-init Doubao on startup
+  // Auto-init Doubao on startup (skip if already running)
   if (store.get('auto_init_agent')) {
-    // Delay slightly to let UI settle
-    setTimeout(() => {
-      launchDoubaoWithDebug();
+    setTimeout(async () => {
+      var endpoint = (store.get('agents.doubao-app') || {}).endpoint || 'http://127.0.0.1:9225';
+      var alreadyRunning = await isEndpointReachable(endpoint);
+      if (alreadyRunning) {
+        console.log('[Main] Doubao already running at', endpoint + ', skipping auto-init');
+      } else {
+        console.log('[Main] Doubao not detected at', endpoint + ', starting...');
+        launchDoubaoWithDebug();
+      }
     }, 2000);
   }
 
