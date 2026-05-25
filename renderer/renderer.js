@@ -216,7 +216,12 @@ async function init() {
   }
 
   populateForm(config);
-  
+
+  // Sync version badge with about page
+  var verEl = document.getElementById('versionBadge');
+  var aboutVer = document.getElementById('appVersion');
+  if (verEl && aboutVer) verEl.textContent = aboutVer.textContent;
+
   // Setup event listeners
   setupEventListeners();
   
