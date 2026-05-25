@@ -7,6 +7,11 @@
     "comingSoon": "More agents coming soon..."
   },
 
+  "history": {
+    "title": "History",
+    "btnTitle": "History"
+  },
+
   "usage": {
     "title": "Usage",
     "step1": "Select the Agent you want to use on the home page. Click ✏️ on a prompt capsule to set a shortcut, then toggle the switch on the right to enable it.",

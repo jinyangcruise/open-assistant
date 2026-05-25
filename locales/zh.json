@@ -7,6 +7,11 @@
     "comingSoon": "更多 Agent 适配中，敬请期待"
   },
 
+  "history": {
+    "title": "历史",
+    "btnTitle": "历史"
+  },
+
   "usage": {
     "title": "使用说明",
     "step1": "在首页 AI Agent 区域选择一个或多个 Agent。",

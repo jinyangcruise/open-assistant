@@ -18,8 +18,8 @@
             <button class="lang-btn" data-lang="zh">中文</button>
             <button class="lang-btn" data-lang="en">English</button>
           </div>
-          <button id="historyBtn" class="top-bar-btn" title="History">🕐</button>
-          <button id="settingsBtn" class="top-bar-btn" title="Settings">⚙️</button>
+          <button id="historyBtn" class="top-bar-btn" data-i18n-title="history.btnTitle">🕐</button>
+          <button id="settingsBtn" class="top-bar-btn" data-i18n-title="config.title">⚙️</button>
         </div>
       </header>
 
@@ -214,12 +214,12 @@
     <div id="historyView" style="display:none">
       <header class="top-bar">
         <button id="historyBackBtn" class="top-bar-btn">←</button>
-        <span class="top-bar-title">History</span>
+        <span class="top-bar-title" data-i18n="history.title">History</span>
       </header>
 
       <nav class="settings-tabs">
-        <button class="tab-btn active" data-histab="result">Last Result</button>
-        <button class="tab-btn" data-histab="log">Activity Log</button>
+        <button class="tab-btn active" data-histab="result" data-i18n="result.title">Last Result</button>
+        <button class="tab-btn" data-histab="log" data-i18n="log.title">Activity Log</button>
       </nav>
 
       <main class="view-content">
