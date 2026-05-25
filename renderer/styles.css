@@ -543,6 +543,24 @@ kbd {
   color: #065f46;
 }
 
+.result-copy-btn {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.result-copy-btn:hover {
+  background: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
 .result-text {
   font-family: 'Courier New', monospace;
   white-space: pre-wrap;

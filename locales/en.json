@@ -129,7 +129,8 @@
     "code": "💻 Code",
     "document": "📄 Document",
     "noContent": "No content",
-    "generatedAt": "Generated at {time}"
+    "generatedAt": "Generated at {time}",
+    "copyBtn": "Copy to clipboard"
   },
 
   "log": {

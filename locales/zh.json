@@ -130,7 +130,8 @@
     "code": "💻 代码",
     "document": "📄 文档",
     "noContent": "无内容",
-    "generatedAt": "生成于 {time}"
+    "generatedAt": "生成于 {time}",
+    "copyBtn": "复制到剪贴板"
   },
 
   "log": {

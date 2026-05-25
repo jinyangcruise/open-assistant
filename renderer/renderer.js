@@ -481,15 +481,31 @@ function displayResult(result) {
 
   var typeLabel = result.type === 'code' ? t('result.code') : t('result.document');
   var typeClass = result.type;
+  var textContent = result.text || '';
 
-  resultCard.innerHTML = `
-    <div class="result-type ${typeClass}">${typeLabel}</div>
-    <div class="result-text">${escapeHtml(result.text || t('result.noContent'))}</div>
-    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
-      ${t('result.generatedAt', { time: new Date(result.timestamp).toLocaleString() })}
-    </div>
-  `;
-  
+  resultCard.innerHTML = [
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;">',
+    '  <div class="result-type ' + typeClass + '">' + typeLabel + '</div>',
+    '  <button class="result-copy-btn" title="' + t('result.copyBtn') + '">📋</button>',
+    '</div>',
+    '<div class="result-text">' + escapeHtml(textContent || t('result.noContent')) + '</div>',
+    '<div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">',
+      t('result.generatedAt', { time: new Date(result.timestamp).toLocaleString() }),
+    '</div>'
+  ].join('');
+
+  // Copy button handler
+  resultCard.querySelector('.result-copy-btn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    try {
+      navigator.clipboard.writeText(textContent);
+      this.textContent = '✓';
+      setTimeout(function(btn) { btn.textContent = '📋'; }, 1500, this);
+    } catch (err) {
+      this.textContent = '✗';
+    }
+  });
+
   // Clear placeholder
   if (resultContainer.querySelector('.placeholder')) {
     resultContainer.innerHTML = '';
