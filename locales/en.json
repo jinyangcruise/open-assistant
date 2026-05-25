@@ -3,6 +3,10 @@
   "title": "Open Assistant",
   "subtitle": "AI-powered code and document completion",
 
+  "home": {
+    "comingSoon": "More agents coming soon..."
+  },
+
   "usage": {
     "title": "Usage",
     "step1": "Select the Agent you want to use on the home page. Click ✏️ on a prompt capsule to set a shortcut, then toggle the switch on the right to enable it.",

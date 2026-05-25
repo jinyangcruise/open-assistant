@@ -3,6 +3,10 @@
   "title": "Open Assistant",
   "subtitle": "AI 驱动的代码与文档补全助手",
 
+  "home": {
+    "comingSoon": "更多 Agent 适配中，敬请期待"
+  },
+
   "usage": {
     "title": "使用说明",
     "step1": "在下方 <strong>AI Agent</strong> 区域选择一个或多个 Agent",
