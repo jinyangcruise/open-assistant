@@ -68,8 +68,11 @@ function createMainWindow() {
   mainWindow.loadFile('renderer/index.html');
 
   mainWindow.on('ready-to-show', () => {
-    if (process.argv.includes('--dev')) {
+    var shouldShow = process.argv.includes('--dev') || store.get('quiet_start') === false;
+    if (shouldShow) {
       mainWindow.show();
+    }
+    if (process.argv.includes('--dev')) {
       mainWindow.webContents.openDevTools();
     }
   });
@@ -254,6 +257,19 @@ function tt(key, replacements) {
   return val.replace(/\{(\w+)\}/g, function(_, k) {
     return replacements[k] !== undefined ? replacements[k] : '{' + k + '}';
   });
+}
+
+// Apply auto-launch (login item) setting
+function applyAutoLaunch(enabled) {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      path: app.getPath('exe'),
+    });
+    console.log(`[Main] Auto-launch ${enabled ? 'enabled' : 'disabled'}`);
+  } catch (error) {
+    console.error('[Main] Failed to set auto-launch:', error.message);
+  }
 }
 
 // Build or rebuild the tray context menu from current config
@@ -663,13 +679,18 @@ function setupIpcHandlers() {
   // Update config
   ipcMain.handle('update-config', (event, updates) => {
     store.set(updates);
-    
+
+    // Apply auto-launch when setting changes
+    if (updates.hasOwnProperty('auto_launch')) {
+      applyAutoLaunch(updates.auto_launch);
+    }
+
     // Re-register all shortcuts (in case agent configs changed)
     registerAllShortcuts();
-    
+
     // Rebuild tray menu to reflect config changes (e.g. Output mode)
     rebuildTrayMenu();
-    
+
     return store.store;
   });
 
@@ -941,6 +962,19 @@ app.whenReady().then(() => {
   createOverlayWindow();
   createTray();
   registerAllShortcuts();
+
+  // Apply startup settings
+  if (store.get('auto_launch')) {
+    applyAutoLaunch(true);
+  }
+
+  // Auto-init Doubao on startup
+  if (store.get('auto_init_agent')) {
+    // Delay slightly to let UI settle
+    setTimeout(() => {
+      launchDoubaoWithDebug();
+    }, 2000);
+  }
 });
 
 app.on('window-all-closed', (e) => {

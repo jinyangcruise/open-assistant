@@ -77,7 +77,10 @@
     "reset": "Reset to Defaults",
     "resetConfirmTitle": "Reset Settings",
     "resetConfirmMsg": "Are you sure you want to reset all settings to defaults?",
-    "language": "Language"
+    "language": "Language",
+    "autoLaunch": "Launch at system startup",
+    "quietStart": "Start silently (minimize to tray)",
+    "autoInitAgent": "Initialize Doubao on startup"
   },
 
   "result": {

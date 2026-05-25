@@ -86,6 +86,30 @@
             </label>
           </div>
 
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="autoLaunch" name="auto_launch">
+              <span class="checkmark"></span>
+              <span data-i18n="config.autoLaunch">开机启动</span>
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="quietStart" name="quiet_start">
+              <span class="checkmark"></span>
+              <span data-i18n="config.quietStart">静默启动（启动时隐藏到托盘）</span>
+            </label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="autoInitAgent" name="auto_init_agent">
+              <span class="checkmark"></span>
+              <span data-i18n="config.autoInitAgent">启动时初始化豆包</span>
+            </label>
+          </div>
+
           <div class="form-group">
             <label for="logLevel" data-i18n="config.logLevel">日志级别</label>
             <select id="logLevel" name="log_level">

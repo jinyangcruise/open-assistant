@@ -77,7 +77,10 @@
     "reset": "恢复默认设置",
     "resetConfirmTitle": "重置设置",
     "resetConfirmMsg": "确定要恢复所有设置为默认值吗？",
-    "language": "语言"
+    "language": "语言",
+    "autoLaunch": "开机启动",
+    "quietStart": "静默启动（启动时隐藏到托盘）",
+    "autoInitAgent": "启动时初始化豆包"
   },
 
   "result": {

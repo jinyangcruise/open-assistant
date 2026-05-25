@@ -254,6 +254,9 @@ async function saveConfig() {
   }
   // Checkbox values are not included in FormData when unchecked, read them directly
   updates['show_notifications'] = document.getElementById('showNotifications').checked;
+  updates['auto_launch'] = document.getElementById('autoLaunch').checked;
+  updates['quiet_start'] = document.getElementById('quietStart').checked;
+  updates['auto_init_agent'] = document.getElementById('autoInitAgent').checked;
   
   try {
     config = await window.electronAPI.updateConfig(updates);
@@ -267,6 +270,9 @@ function populateForm(config) {
   document.getElementById('timeout').value = config.timeout_seconds || 30;
   document.getElementById('autoInsert').value = config.auto_insert !== false ? 'true' : 'false';
   document.getElementById('showNotifications').checked = config.show_notifications !== false;
+  document.getElementById('autoLaunch').checked = config.auto_launch === true;
+  document.getElementById('quietStart').checked = config.quiet_start !== false;
+  document.getElementById('autoInitAgent').checked = config.auto_init_agent === true;
   document.getElementById('logLevel').value = config.log_level || 'info';
   document.getElementById('responseMode').value = config.response_mode || 'sse-fetch';
   document.getElementById('outputMode').value = config.output_mode || 'streaming';
