@@ -278,8 +278,13 @@ async function init() {
       case 'error':
         icon.classList.remove('spinning');
         btn.disabled = false;
-        statusEl.textContent = data.message || t('about.checkFailed');
+        statusEl.textContent = t('about.checkFailed');
         statusEl.className = 'update-status visible';
+        // Make status text clickable to open releases page
+        statusEl.style.cursor = 'pointer';
+        statusEl.onclick = function() {
+          window.electronAPI.openExternal('https://github.com/jinyangcruise/OpenAssistant/releases');
+        };
         break;
     }
   });
@@ -402,6 +407,10 @@ function setupEventListeners() {
         status.textContent = '请先构建安装包后再检查更新';
       } else {
         status.textContent = t('about.checkFailed');
+        status.style.cursor = 'pointer';
+        status.onclick = function() {
+          window.electronAPI.openExternal('https://github.com/jinyangcruise/OpenAssistant/releases');
+        };
       }
     }
   });

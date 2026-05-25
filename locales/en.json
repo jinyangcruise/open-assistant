@@ -97,7 +97,7 @@
     "checkUpdate": "Check for Updates",
     "uptodate": "Already up to date!",
     "newVersion": "New version {version} available!",
-    "checkFailed": "Failed to check updates",
+    "checkFailed": "Network error — click to download manually",
     "checking": "Checking...",
     "downloading": "Downloading...",
     "readyInstall": "Downloaded! Click to restart and install",

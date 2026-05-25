@@ -67,21 +67,24 @@
         "dmg"
       ],
       "icon": "assets/icon.icns",
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "artifactName": "OpenAssistant-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
       "icon": "assets/icon.png",
-      "category": "Development"
+      "category": "Development",
+      "artifactName": "OpenAssistant-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "OpenAssistant-Setup-${version}.${ext}"
     },
     "publish": {
       "provider": "github",
