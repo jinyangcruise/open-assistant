@@ -28,6 +28,16 @@ body {
   overflow-x: hidden;
 }
 
+/* Fade-in animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fadeInUp 0.2s ease-out;
+}
+
 .app {
   min-width: 600px;
   height: 100vh;

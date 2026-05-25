@@ -59,22 +59,45 @@ const confirmDialogCancel = document.getElementById('confirmDialogCancel');
 
 // ===== View Navigation =====
 
+function addViewAnimation(viewEl) {
+  var content = viewEl.querySelector('.view-content');
+  if (content) {
+    for (var i = 0; i < content.children.length; i++) {
+      var child = content.children[i];
+      child.classList.remove('animate-in');
+      void child.offsetWidth;
+      child.classList.add('animate-in');
+    }
+  }
+}
+
 function showSettings() {
   homeView.style.display = 'none';
   historyView.style.display = 'none';
   settingsView.style.display = 'flex';
+  addViewAnimation(settingsView);
 }
 
 function showHistory() {
   homeView.style.display = 'none';
   settingsView.style.display = 'none';
   historyView.style.display = 'flex';
+  addViewAnimation(historyView);
 }
 
 function showHome() {
   settingsView.style.display = 'none';
   historyView.style.display = 'none';
   homeView.style.display = 'flex';
+  addViewAnimation(homeView);
+}
+
+function addTabAnimation(tabEl) {
+  if (tabEl) {
+    tabEl.classList.remove('animate-in');
+    void tabEl.offsetWidth;
+    tabEl.classList.add('animate-in');
+  }
 }
 
 // ===== Settings & History Tabs =====
@@ -88,7 +111,10 @@ function setupTabListeners() {
       var tabName = btn.getAttribute('data-tab');
       document.querySelectorAll('#settingsView .tab-content').forEach(function(tc) { tc.style.display = 'none'; });
       var target = document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
-      if (target) target.style.display = 'block';
+      if (target) {
+        target.style.display = 'block';
+        addTabAnimation(target);
+      }
     });
   });
   // History tabs (data-histab -> #histabXxx)
@@ -99,7 +125,10 @@ function setupTabListeners() {
       var tabName = btn.getAttribute('data-histab');
       document.querySelectorAll('#historyView .tab-content').forEach(function(tc) { tc.style.display = 'none'; });
       var target = document.getElementById('histab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
-      if (target) target.style.display = 'block';
+      if (target) {
+        target.style.display = 'block';
+        addTabAnimation(target);
+      }
     });
   });
 }
