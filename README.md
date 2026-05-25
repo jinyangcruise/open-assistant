@@ -4,6 +4,8 @@
 
 AI-powered code and document completion assistant. Captures your screen, sends it to an AI agent (e.g., Doubao Desktop), and waits for the AI to insert the generated response at your cursor.
 
+<img src="screenshots/en/settings.png" alt="Settings UI" width="600">
+
 ## How It Works
 
 1. Configure one or more AI agents and write prompts
@@ -24,8 +26,6 @@ AI-powered code and document completion assistant. Captures your screen, sends i
 - **System Tray** — Runs quietly in the system tray. No window needed
 - **Auto-Detect Install Path** — Finds the Doubao executable automatically on startup
 - **Custom Prompts** — Create, edit, and delete prompt templates in the settings UI
-
-![Settings UI](screenshots/en/settings.png)
 
 ## Quick Start
 
