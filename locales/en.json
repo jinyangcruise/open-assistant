@@ -46,6 +46,7 @@
     "installLabel": "Install Path:",
     "installPlaceholder": "Leave empty for auto-detect",
     "test": "Test",
+    "restart": "Restart agent",
     "promptsTitle": "Prompts",
     "shortcutUnset": "Not set",
     "shortcutEditTitle": "Set shortcut",
@@ -91,6 +92,16 @@
     "description": "AI-powered code and document completion assistant"
   },
 
+  "faq": {
+    "title": "FAQ",
+    "q1": "Cannot connect to Doubao?",
+    "a1": "Click the 🔄 restart button on the agent card, or click \"Initialize Doubao\" in the tray menu to start Doubao with the correct debugging port. Also check that the port is not blocked by a firewall.",
+    "q2": "Shortcut not working?",
+    "a2": "Check for conflicts with other applications. Try a different shortcut combination. On macOS, grant Accessibility permissions to the app.",
+    "q3": "Auto-insert not working?",
+    "a3": "Go to Settings → General → Output Destination and make sure \"Auto insert at cursor\" is selected. Also ensure the editor you are using keeps focus while waiting for the AI response."
+  },
+
   "result": {
     "title": "Last Result",
     "placeholder": "No results yet. Trigger the assistant to see results here.",
@@ -129,7 +140,8 @@
     "agentTestError": "Error testing agent connection: {msg}",
     "promptDefaultReset": "Default prompt reset to built-in value",
     "selectedPrompt": "Selected prompt for editing: {name}",
-    "agentsLoadFailed": "Failed to load agents: {msg}"
+    "agentsLoadFailed": "Failed to load agents: {msg}",
+    "restarting": "Restarting {id}..."
   },
 
   "shortcut": {

@@ -184,7 +184,13 @@ section {
 /* About Section */
 .about-section {
   text-align: center;
-  padding: 2rem 1rem;
+}
+
+.about-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  padding: 2rem 1.5rem;
+  color: white;
 }
 
 .about-logo {
@@ -195,29 +201,31 @@ section {
 .about-name {
   font-size: 1.3rem;
   font-weight: 700;
-  color: var(--text-color);
+  color: #fff;
   margin-bottom: 0.3rem;
 }
 
 .about-version {
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.85);
   margin-bottom: 0.5rem;
 }
 
 .about-description {
   font-size: 0.9rem;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.9);
   margin-bottom: 1rem;
 }
 
 .about-link a {
-  color: var(--primary-color);
+  color: #fff;
   text-decoration: none;
   font-size: 0.85rem;
+  opacity: 0.85;
 }
 
 .about-link a:hover {
+  opacity: 1;
   text-decoration: underline;
 }
 
@@ -255,6 +263,33 @@ section {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* FAQ Section */
+.faq-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.faq-item {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+
+.faq-q {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-color);
+  margin-bottom: 0.35rem;
+}
+
+.faq-a {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .btn {
@@ -953,12 +988,12 @@ footer a:hover {
   align-items: center;
   justify-content: center;
   background: none;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  font-size: 0.7rem;
-  padding: 0.1rem 0.2rem;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.35rem;
   color: var(--text-secondary);
-  border-radius: 3px;
+  border-radius: 4px;
   line-height: 1;
   transition: all 0.15s;
   flex-shrink: 0;
@@ -967,6 +1002,7 @@ footer a:hover {
 .capsule-edit-btn:hover {
   color: var(--primary-color);
   background: #eef2ff;
+  border-color: var(--border-color);
 }
 
 .capsule-clear-btn {
@@ -974,21 +1010,22 @@ footer a:hover {
   align-items: center;
   justify-content: center;
   background: none;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  font-size: 0.65rem;
-  padding: 0.1rem 0.2rem;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.3rem;
   color: var(--text-secondary);
-  border-radius: 3px;
+  border-radius: 4px;
   line-height: 1;
   transition: all 0.15s;
   flex-shrink: 0;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .capsule-clear-btn:hover {
   color: var(--error-color);
   background: #fef2f2;
+  border-color: #fecaca;
   opacity: 1;
 }
 

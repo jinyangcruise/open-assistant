@@ -689,6 +689,7 @@ function renderAgents() {
       '    <input type="text" class="agent-endpoint-input" data-agent-id="' + a.id + '" ' +
       '      value="' + escapeHtml(a.endpoint) + '" />' +
       '    <button class="btn btn-xs btn-secondary test-btn" data-agent-id="' + a.id + '">' + t('agent.test') + '</button>' +
+      '    <button class="btn btn-xs btn-secondary restart-btn" data-agent-id="' + a.id + '" title="' + t('agent.restart') + '">🔄 ' + t('agent.restart') + '</button>' +
       '  </div>' +
       '  <div class="agent-install-path">' +
       '    <label class="install-path-label">' + t('agent.installLabel') + '</label>' +
@@ -759,6 +760,19 @@ function renderAgents() {
       });
     })(testBtns[k]);
   }
+
+  // Attach restart button handlers
+  var restartBtns = agentsList.querySelectorAll('.restart-btn');
+  for (var m = 0; m < restartBtns.length; m++) {
+    (function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var agentId = btn.dataset.agentId;
+        addLog(t('log.restarting', { id: agentId }), 'info');
+        window.electronAPI.restartAgent(agentId);
+      });
+    })(restartBtns[m]);
+  }
 }
 
 function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
@@ -768,30 +782,32 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
   listEl.innerHTML = '';
 
   // Helper to render a capsule for a prompt
-  function createCapsule(promptId, promptName) {
+  function createCapsule(promptId, promptName, promptContent) {
     var ps = promptShortcuts[promptId] || {};
     var shortcut = (ps.shortcut || '').trim();
     var enabled = !!ps.enabled;
+    var fullContent = promptContent || promptName;
 
     var capsule = document.createElement('div');
     capsule.className = 'prompt-capsule' + (enabled ? ' active' : '');
+    capsule.setAttribute('title', fullContent);
 
     var shortcutDisplay = shortcut
-      ? '<span class="capsule-shortcut-text">' + escapeHtml(shortcut.replace('Control', 'Ctrl')) + '</span>'
-      : '<span class="capsule-shortcut-unset">' + t('agent.shortcutUnset') + '</span>';
+      ? '<span class="capsule-shortcut-text" title="">' + escapeHtml(shortcut.replace('Control', 'Ctrl')) + '</span>'
+      : '<span class="capsule-shortcut-unset" title="">' + t('agent.shortcutUnset') + '</span>';
 
     var clearBtnHtml = shortcut
       ? '<button class="capsule-clear-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutClearTitle') + '">✕</button>'
       : '';
 
     capsule.innerHTML =
-      '<div class="prompt-capsule-name" title="' + escapeHtml(promptName) + '">' + escapeHtml(promptName) + '</div>' +
+      '<div class="prompt-capsule-name" title="' + escapeHtml(fullContent) + '">' + escapeHtml(promptName) + '</div>' +
       '<div class="prompt-capsule-shortcut">' +
             shortcutDisplay +
       '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutEditTitle') + '">✏️</button>' +
             clearBtnHtml +
       '</div>' +
-      '<button class="capsule-btn' + (enabled ? ' active' : '') + '" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '">' +
+      '<button class="capsule-btn' + (enabled ? ' active' : '') + '" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + (enabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
             (enabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
       '</button>';
 
@@ -828,12 +844,12 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
   }
 
   // System Default prompt (always first)
-  listEl.appendChild(createCapsule('system-default', t('prompt.systemDefault')));
+  listEl.appendChild(createCapsule('system-default', t('prompt.systemDefault'), defaultPromptText));
 
   // User-defined prompts
   for (var j = 0; j < prompts.length; j++) {
     var p = prompts[j];
-    listEl.appendChild(createCapsule(p.id, p.name));
+    listEl.appendChild(createCapsule(p.id, p.name, p.content));
   }
 }
 

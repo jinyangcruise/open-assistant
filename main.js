@@ -927,6 +927,15 @@ function setupIpcHandlers() {
     shell.openExternal(url);
   });
 
+  // Restart (initialize) an agent
+  ipcMain.handle('restart-agent', (event, agentId) => {
+    if (agentId === 'doubao-app') {
+      launchDoubaoWithDebug();
+    } else {
+      console.log('[Main] No restart handler for agent:', agentId);
+    }
+  });
+
   // Load locale file
   ipcMain.handle('get-locale', (event, lang) => {
     const fs = require('fs');

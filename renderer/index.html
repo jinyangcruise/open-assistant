@@ -45,6 +45,7 @@
         <button class="tab-btn active" data-tab="prompts" data-i18n="prompt.title">Prompt Management</button>
         <button class="tab-btn" data-tab="general" data-i18n="config.general">General</button>
         <button class="tab-btn" data-tab="usage" data-i18n="usage.title">Usage</button>
+        <button class="tab-btn" data-tab="faq" data-i18n="faq.title">FAQ</button>
         <button class="tab-btn" data-tab="about" data-i18n="about.title">About</button>
       </nav>
 
@@ -159,14 +160,34 @@
           </section>
         </div>
 
+        <!-- Tab: FAQ -->
+        <div id="tabFaq" class="tab-content" style="display:none">
+          <section class="faq-section">
+            <div class="faq-item">
+              <div class="faq-q" data-i18n="faq.q1">无法连接到豆包桌面端怎么办？</div>
+              <div class="faq-a" data-i18n="faq.a1">请点击 Agent 卡片上的 🔄 重启按钮，或在托盘菜单中点击「初始化豆包」，以正确调试端口启动豆包。同时检查端口是否被防火墙拦截。</div>
+            </div>
+            <div class="faq-item">
+              <div class="faq-q" data-i18n="faq.q2">快捷键无效怎么办？</div>
+              <div class="faq-a" data-i18n="faq.a2">检查是否与其他软件的快捷键冲突，尝试使用不同的快捷键组合。macOS 用户需要为应用授予辅助功能权限。</div>
+            </div>
+            <div class="faq-item">
+              <div class="faq-q" data-i18n="faq.q3">无法自动粘贴结果？</div>
+              <div class="faq-a" data-i18n="faq.a3">进入设置 → 通用 → 输出方式，确保选择了「自动粘贴到光标位置」。同时在等待回复的过程中确保正在使用的编辑器没有失去焦点。</div>
+            </div>
+          </section>
+        </div>
+
         <!-- Tab: About -->
         <div id="tabAbout" class="tab-content" style="display:none">
           <div class="about-section">
-            <div class="about-logo">🤖</div>
-            <div class="about-name">Open Assistant</div>
-            <div class="about-version"><span data-i18n="about.version">Version</span>: <span id="appVersion">0.5.0</span></div>
-            <div class="about-description" data-i18n="about.description">AI-powered code and document completion assistant</div>
-            <div class="about-link"><a href="https://github.com/jinyangcruise/OpenAssistant" target="_blank">GitHub</a></div>
+            <div class="about-card">
+              <div class="about-logo">🤖</div>
+              <div class="about-name">Open Assistant</div>
+              <div class="about-version"><span data-i18n="about.version">Version</span>: <span id="appVersion">0.5.0</span></div>
+              <div class="about-description" data-i18n="about.description">AI-powered code and document completion assistant</div>
+              <div class="about-link"><a href="https://github.com/jinyangcruise/OpenAssistant" target="_blank">GitHub</a></div>
+            </div>
           </div>
         </div>
 

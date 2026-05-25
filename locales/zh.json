@@ -47,6 +47,7 @@
     "installLabel": "安装路径：",
     "installPlaceholder": "留空则自动检测",
     "test": "测试",
+    "restart": "重启 Agent",
     "promptsTitle": "提示词",
     "shortcutUnset": "未设置",
     "shortcutEditTitle": "设置快捷键",
@@ -92,6 +93,16 @@
     "description": "AI 驱动的代码与文档补全助手"
   },
 
+  "faq": {
+    "title": "常见问题",
+    "q1": "无法连接到豆包桌面端怎么办？",
+    "a1": "请点击 Agent 卡片上的 🔄 重启按钮，或在托盘菜单中点击「初始化豆包」，以正确调试端口启动豆包。同时检查端口是否被防火墙拦截。",
+    "q2": "快捷键无效怎么办？",
+    "a2": "检查是否与其他软件的快捷键冲突，尝试使用不同的快捷键组合。macOS 用户需要为应用授予辅助功能权限。",
+    "q3": "无法自动粘贴结果？",
+    "a3": "进入设置 → 通用 → 输出方式，确保选择了「自动粘贴到光标位置」。同时在等待回复的过程中确保正在使用的编辑器没有失去焦点。"
+  },
+
   "result": {
     "title": "最近结果",
     "placeholder": "暂无结果。触发助手后将在此显示结果。",
@@ -130,7 +141,8 @@
     "agentTestError": "测试 Agent 连接出错：{msg}",
     "promptDefaultReset": "默认提示词已恢复为内置值",
     "selectedPrompt": "已选择提示词进行编辑：{name}",
-    "agentsLoadFailed": "加载 Agent 失败：{msg}"
+    "agentsLoadFailed": "加载 Agent 失败：{msg}",
+    "restarting": "正在重启 {id}..."
   },
 
   "shortcut": {

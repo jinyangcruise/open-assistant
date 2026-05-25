@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Utilities
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getLocale: (lang) => ipcRenderer.invoke('get-locale', lang),
+  restartAgent: (agentId) => ipcRenderer.invoke('restart-agent', agentId),
 });
 
 // Suppress link navigation inside the Electron window
