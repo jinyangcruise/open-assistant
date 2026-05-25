@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.5.4 — 2026-05-25
+
+### English
+
+#### New Features
+- **Copy button on result cards**: Each entry in Last Result now has a 📋 copy button. Click to copy AI response to clipboard.
+
+#### Improvements
+- **Home page**: Version badge next to app title ("Open Assistant 0.5.4"), and "More agents coming soon..." footer.
+- **i18n coverage**: History view title and tabs now translate in Chinese mode.
+- **Settings tabs**: Rounded border around tab button group for visual clarity.
+
+---
+
+### 中文
+
+#### 新增功能
+- **结果卡片复制按钮**：每条 AI 回复右上角的 📋 按钮，点击复制到剪贴板。
+
+#### 改进
+- **主页**：标题旁显示版本号徽标，底部显示"更多 Agent 适配中，敬请期待"。
+- **多语言覆盖**：History 页面标题和页签在中文模式下正确翻译。
+- **设置页签**：添加圆角边框，视觉更清晰。
+
+
 ## v0.5.3 — 2026-05-25
 
 ### English

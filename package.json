@@ -1,6 +1,6 @@
 {
   "name": "open-assistant",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Open Assistant - AI-powered code and document completion",
   "main": "main.js",
   "scripts": {
