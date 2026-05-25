@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.3 — 2026-05-25
+
+### English
+
+#### Fixes
+- **Auto-updater filename mismatch**: Added explicit `artifactName` for Windows (`OpenAssistant-Setup-${version}`), macOS, and Linux builds. Installer filenames are now consistent between `latest.yml` and the actual uploaded file.
+- **Update error UX**: Network timeout or failure now shows "Network error — click to download manually" and opens GitHub Releases page on click.
+
+#### Changes
+- Updated CHANGELOG to track releases
+
+---
+
+### 中文
+
+#### 修复
+- **自动更新文件名不一致**：为 Windows、macOS、Linux 构建添加明确的 `artifactName`，确保 `latest.yml` 中的文件名与实际上传的文件一致
+- **更新错误提示优化**：网络超时或失败时显示"网络错误 — 点击手动下载"，点击跳转 GitHub Releases
+
+#### 变更
+- 更新 CHANGELOG 以跟踪版本
+
 ## v0.5.2 — 2026-05-25
 
 ### English
