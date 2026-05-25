@@ -141,5 +141,14 @@
     "disconnected": "未连接",
     "error": "错误",
     "testResult": "已连接（{title}）"
+  },
+
+  "tray": {
+    "openSettings": "打开设置",
+    "output": "输出方式",
+    "autoInsert": "自动粘贴",
+    "clipboard": "剪贴板",
+    "initAgent": "初始化 {name}",
+    "quit": "退出"
   }
 }

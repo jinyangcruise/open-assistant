@@ -220,13 +220,43 @@ function createTray() {
 // Built-in default prompt (used for reset functionality)
 const BUILTIN_DEFAULT_PROMPT = '我发送了一张屏幕截图，请分析截图中的内容，并提供智能补全建议。\n\n当前应用: {app}\n\n要求：\n\n1. 判断我正在做什么（写代码/写文档/其他）\n2. 如果是代码，识别编程语言和上下文\n3. 根据上下文，提供智能补全建议\n4. 只返回补全内容，不要解释\n5. 保持代码格式和缩进\n6. 根据用户使用的编程语言和工具，使用正确的缩进方式（空格/制表符）\n7. 不要重复用户已有的内容，例如用户写的注释\n\n请直接分析屏幕截图并返回补全建议：';
 
+// Simple locale loader for tray menu (main process)
+let _trayLocale = {};
+let _trayLang = 'zh';
+
+function loadTrayLocale() {
+  _trayLang = store.get('language') || 'zh';
+  const fs = require('fs');
+  const localePath = path.join(__dirname, 'locales', _trayLang + '.json');
+  const finalPath = fs.existsSync(localePath) ? localePath : path.join(__dirname, 'locales', 'zh.json');
+  try {
+    _trayLocale = JSON.parse(fs.readFileSync(finalPath, 'utf-8'));
+  } catch (e) {
+    _trayLocale = {};
+  }
+}
+
+function tt(key, replacements) {
+  var keys = key.split('.');
+  var val = _trayLocale;
+  for (var i = 0; i < keys.length; i++) {
+    val = val ? val[keys[i]] : undefined;
+  }
+  if (val === undefined || val === null) return key;
+  if (!replacements) return val;
+  return val.replace(/\{(\w+)\}/g, function(_, k) {
+    return replacements[k] !== undefined ? replacements[k] : '{' + k + '}';
+  });
+}
+
 // Build or rebuild the tray context menu from current config
 function rebuildTrayMenu() {
   if (!tray) return;
+  loadTrayLocale();
 
   const menuItems = [
     {
-      label: 'Open Settings',
+      label: tt('tray.openSettings'),
       click: () => {
         if (mainWindow) {
           mainWindow.show();
@@ -237,10 +267,10 @@ function rebuildTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Output',
+      label: tt('tray.output'),
       submenu: [
         {
-          label: 'Auto Insert',
+          label: tt('tray.autoInsert'),
           type: 'radio',
           checked: store.get('auto_insert') !== false,
           click: () => {
@@ -249,7 +279,7 @@ function rebuildTrayMenu() {
           }
         },
         {
-          label: 'Clipboard',
+          label: tt('tray.clipboard'),
           type: 'radio',
           checked: store.get('auto_insert') === false,
           click: () => {
@@ -261,11 +291,12 @@ function rebuildTrayMenu() {
     },
   ];
 
-  // Add "Initialize Doubao" if the doubao-app agent is selected
+  // Add "Initialize {agent}" for each selected agent that supports it
   const selectedIds = AgentRegistry.getSelectedIds();
   if (selectedIds.includes('doubao-app')) {
+    const agent = AgentRegistry.getAgent('doubao-app');
     menuItems.push({
-      label: 'Initialize Doubao Desktop',
+      label: tt('tray.initAgent', { name: agent ? agent.name : 'Doubao' }),
       click: () => launchDoubaoWithDebug()
     });
   }
@@ -273,7 +304,7 @@ function rebuildTrayMenu() {
   menuItems.push(
     { type: 'separator' },
     {
-      label: 'Quit',
+      label: tt('tray.quit'),
       click: () => app.quit()
     }
   );

@@ -141,5 +141,14 @@
     "disconnected": "Disconnected",
     "error": "Error",
     "testResult": "Connected ({title})"
+  },
+
+  "tray": {
+    "openSettings": "Open Settings",
+    "output": "Output",
+    "autoInsert": "Auto Insert",
+    "clipboard": "Clipboard",
+    "initAgent": "Initialize {name}",
+    "quit": "Quit"
   }
 }

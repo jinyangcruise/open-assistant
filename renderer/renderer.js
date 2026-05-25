@@ -54,6 +54,17 @@ async function loadLocale(lang) {
   currentLang = lang || 'zh';
   locale = await window.electronAPI.getLocale(currentLang);
   applyTranslations();
+  updateLangButtons(currentLang);
+}
+
+function updateLangButtons(lang) {
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    if (btn.getAttribute('data-lang') === lang) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 }
 
 function t(key, replacements) {
@@ -126,24 +137,27 @@ async function init() {
 }
 
 function setupEventListeners() {
-  // Auto-save on any form field change (except language - handled separately)
+  // Auto-save on any form field change
   const formInputs = configForm.querySelectorAll('input, select');
   for (const input of formInputs) {
-    if (input.id === 'language') continue;
     input.addEventListener('change', async () => {
       await saveConfig();
     });
   }
 
-  // Language selector: save + reload locale
-  document.getElementById('language').addEventListener('change', async function() {
-    var newLang = this.value;
-    await window.electronAPI.updateConfig({ language: newLang });
-    addLog(t('log.configSaved'), 'success');
-    await loadLocale(newLang);
-    // Re-render dynamic content
-    if (typeof prompts !== 'undefined') renderPrompts();
-    if (typeof agents !== 'undefined') await loadAgents();
+  // Language switcher buttons
+  document.querySelectorAll('.lang-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var newLang = this.getAttribute('data-lang');
+      if (newLang === currentLang) return;
+      await window.electronAPI.updateConfig({ language: newLang });
+      addLog(t('log.configSaved'), 'success');
+      await loadLocale(newLang);
+      updateLangButtons(newLang);
+      // Re-render dynamic content
+      if (typeof prompts !== 'undefined') renderPrompts();
+      if (typeof agents !== 'undefined') await loadAgents();
+    });
   });
 
   // Reset button
@@ -225,7 +239,6 @@ function populateForm(config) {
   document.getElementById('logLevel').value = config.log_level || 'info';
   document.getElementById('responseMode').value = config.response_mode || 'sse-fetch';
   document.getElementById('outputMode').value = config.output_mode || 'streaming';
-  document.getElementById('language').value = config.language || 'zh';
 }
 
 function handleAnalysisResult(result) {

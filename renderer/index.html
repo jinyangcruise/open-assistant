@@ -11,6 +11,10 @@
     <header>
       <h1>🤖 <span data-i18n="title">Open Assistant</span></h1>
       <p class="subtitle" data-i18n="subtitle">AI-powered code and document completion</p>
+      <div class="lang-switcher">
+        <button class="lang-btn" data-lang="zh">中文</button>
+        <button class="lang-btn" data-lang="en">English</button>
+      </div>
     </header>
 
     <main>
@@ -108,14 +112,6 @@
               <option value="full" data-i18n="config.outputFull">Full（完整获取后一次性粘贴）</option>
             </select>
             <span class="help-text" data-i18n="config.outputModeHelp">Streaming 将 AI 回复按生成顺序逐段粘贴到目标应用。Full 等待完整回复后一次性粘贴。</span>
-          </div>
-
-          <div class="form-group">
-            <label for="language" data-i18n="config.language">语言</label>
-            <select id="language" name="language">
-              <option value="zh">中文</option>
-              <option value="en">English</option>
-            </select>
           </div>
 
           <div class="form-actions">
