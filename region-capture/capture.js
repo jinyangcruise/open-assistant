@@ -468,7 +468,7 @@ function showTextInput(x, y) {
   textOverlay.style.left = x + 'px';
   textOverlay.style.top = y + 'px';
   textArea.value = '';
-  textArea.style.width = '120px';
+  textArea.style.width = '50px';
   textArea.style.height = '28px';
   // Defer focus so the mousedown event fully completes first
   setTimeout(function() { textArea.focus(); }, 0);
@@ -1208,6 +1208,11 @@ document.addEventListener('DOMContentLoaded', function() {
     } else if (e.key === 'Escape') {
       cancelTextInput();
     }
+  });
+  // Auto-expand textarea as user types
+  textArea.addEventListener('input', function() {
+    this.style.width = Math.max(200, Math.min(600, this.scrollWidth + 10)) + 'px';
+    this.style.height = Math.max(28, Math.min(200, this.scrollHeight)) + 'px';
   });
 
   document.getElementById('confirmBtn').addEventListener('click', function() {

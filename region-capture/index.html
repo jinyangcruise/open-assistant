@@ -216,7 +216,7 @@ canvas#displayCanvas {
   overflow: hidden;
   min-width: 30px;
   min-height: 24px;
-  white-space: pre-wrap;
+  white-space: nowrap;
   word-wrap: break-word;
 }
 
@@ -362,7 +362,7 @@ canvas#displayCanvas {
 
 <!-- ── Text input overlay ── -->
 <div id="textInputOverlay">
-  <textarea id="textInputArea" rows="1"></textarea>
+  <textarea id="textInputArea" rows="1" wrap="off"></textarea>
 </div>
 
 <script src="capture.js"></script>
