@@ -995,7 +995,6 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
 
     var card = document.createElement('div');
     card.className = 'prompt-card' + (promptEnabled ? ' active' : '');
-    card.setAttribute('title', fullContent);
 
     card.innerHTML =
       '<div class="prompt-card-name" title="' + escapeHtml(fullContent) + '">' + escapeHtml(promptName) + '</div>' +
