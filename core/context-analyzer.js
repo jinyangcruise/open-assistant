@@ -1,6 +1,6 @@
 /**
  * Context Analyzer
- * 
+ *
  * Detects active window and application context
  */
 
@@ -39,7 +39,7 @@ function getActiveWindowWindows() {
   const fs = require('fs');
   const path = require('path');
   const os = require('os');
-  
+
   // Create PowerShell script file to avoid escaping issues
   const script = `
 Add-Type -TypeDefinition @'
@@ -50,10 +50,10 @@ using System.Text;
 public class User32API {
   [DllImport("user32.dll")]
   public static extern IntPtr GetForegroundWindow();
-  
+
   [DllImport("user32.dll")]
   public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-  
+
   [DllImport("user32.dll")]
   public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 }
@@ -73,7 +73,7 @@ Write-Output "$title|$appName|$processId"
 `;
 
   const tempFile = path.join(os.tmpdir(), 'get-window.ps1');
-  
+
   try {
     fs.writeFileSync(tempFile, script);
     const result = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`, {
@@ -82,7 +82,7 @@ Write-Output "$title|$appName|$processId"
     });
 
     const parts = result.trim().split('|');
-    
+
     return {
       title: parts[0] || 'Untitled',
       appName: parts[1] || 'Unknown',
@@ -158,6 +158,81 @@ function getActiveWindowLinux() {
         pid: null
       };
     }
+  }
+}
+
+/**
+ * Get the position and size of the currently focused window (Windows only)
+ * @returns {{ x: number, y: number, width: number, height: number } | null}
+ */
+function getActiveWindowBounds() {
+  if (os.platform() !== 'win32') return null;
+
+  const fs = require('fs');
+  const path = require('path');
+
+  const script = `
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public class W32Bounds {
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetForegroundWindow();
+
+  [DllImport("user32.dll")]
+  public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+  [DllImport("dwmapi.dll")]
+  public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+}
+
+public struct RECT {
+  public int Left;
+  public int Top;
+  public int Right;
+  public int Bottom;
+}
+'@
+
+$h = [W32Bounds]::GetForegroundWindow()
+$dwmRect = New-Object RECT
+$dwmResult = [W32Bounds]::DwmGetWindowAttribute($h, 9, [ref]$dwmRect, [System.Runtime.InteropServices.Marshal]::SizeOf($dwmRect))
+
+if ($dwmResult -eq 0) {
+  Write-Output "$($dwmRect.Left)|$($dwmRect.Top)|$($dwmRect.Right)|$($dwmRect.Bottom)"
+} else {
+  $r = New-Object RECT
+  [W32Bounds]::GetWindowRect($h, [ref]$r) | Out-Null
+  Write-Output "$($r.Left)|$($r.Top)|$($r.Right)|$($r.Bottom)"
+}
+`;
+
+  const tempFile = path.join(os.tmpdir(), 'get-window-bounds.ps1');
+
+  try {
+    fs.writeFileSync(tempFile, script);
+    const result = execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${tempFile}"`, {
+      encoding: 'utf-8',
+      timeout: 5000
+    });
+
+    var parts = result.trim().split('|');
+    var left = parseInt(parts[0]);
+    var top = parseInt(parts[1]);
+    var right = parseInt(parts[2]);
+    var bottom = parseInt(parts[3]);
+
+    if (isNaN(left) || isNaN(top) || isNaN(right) || isNaN(bottom)) {
+      return null;
+    }
+
+    return { x: left, y: top, width: right - left, height: bottom - top };
+  } catch (error) {
+    console.warn('Failed to get active window bounds:', error.message);
+    return null;
+  } finally {
+    try { fs.unlinkSync(tempFile); } catch (e) {}
   }
 }
 
@@ -239,6 +314,7 @@ function buildContextInfo() {
 
 module.exports = {
   detectActiveWindow,
+  getActiveWindowBounds,
   isCodeEditor,
   isDocumentEditor,
   detectContextType,

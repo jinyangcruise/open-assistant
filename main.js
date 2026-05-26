@@ -13,9 +13,9 @@ const path = require('path');
 const { exec, spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const Store = require('electron-store');
-const { takeScreenshot } = require('./core/screenshot');
+const { takeScreenshot, takeWindowScreenshot, captureForegroundWindow } = require('./core/screenshot');
 const { pasteText, StreamingPaster, getText } = require('./core/clipboard-pure');
-const { detectActiveWindow } = require('./core/context-analyzer');
+const { detectActiveWindow, getActiveWindowBounds } = require('./core/context-analyzer');
 const AgentRegistry = require('./core/agent-manager/registry');
 const DoubaoAppAdapter = require('./core/agent-manager/agents/doubao-app-adapter');
 
@@ -554,9 +554,29 @@ async function handleShortcut(agentId, promptId, modeId) {
     const activeWindow = detectActiveWindow();
     console.log('Active window:', activeWindow);
 
-    // 2. Take screenshot
-    console.log('Taking screenshot...');
-    const screenshotBuffer = await takeScreenshot();
+    // 2. Take screenshot (fullscreen or window depending on mode)
+    var screenshotBuffer;
+    if (modeId === 'window') {
+      // Try PrintWindow first (captures only the target window, no overlapping windows)
+      try {
+        console.log('Capturing foreground window via PrintWindow...');
+        screenshotBuffer = await captureForegroundWindow();
+      } catch (pwErr) {
+        // PrintWindow failed (e.g. DirectX content) → fall back to crop from fullscreen
+        console.log('PrintWindow failed, trying crop fallback:', pwErr.message);
+        var winBounds = getActiveWindowBounds();
+        console.log('Window bounds:', winBounds);
+        if (winBounds) {
+          screenshotBuffer = await takeWindowScreenshot(nativeImage, winBounds);
+        } else {
+          console.log('Window bounds unavailable, falling back to fullscreen');
+          screenshotBuffer = await takeScreenshot();
+        }
+      }
+    } else {
+      console.log('Taking full screenshot...');
+      screenshotBuffer = await takeScreenshot();
+    }
     console.log('Screenshot captured:', screenshotBuffer.length, 'bytes');
 
     // 3. Get prompt text based on the promptId that triggered this shortcut
