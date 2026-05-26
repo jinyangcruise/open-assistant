@@ -589,16 +589,15 @@ function startRegionCapture(fullScreenshotBuffer) {
   var scaleFactor = primaryDisplay.scaleFactor;
   var workArea = primaryDisplay.workArea; // CSS pixels
 
-  // Crop the full-resolution screenshot to the work area (physical pixels)
+  // Crop the full-resolution screenshot to the work area (physical pixels).
+  // Keep the full resolution — the region window will use DPR-scaled canvas
+  // so the final captured image stays sharp.
   var cropX = Math.round(workArea.x * scaleFactor);
   var cropY = Math.round(workArea.y * scaleFactor);
   var cropW = Math.round(workArea.width * scaleFactor);
   var cropH = Math.round(workArea.height * scaleFactor);
   var croppedImage = fullImage.crop({ x: cropX, y: cropY, width: cropW, height: cropH });
-
-  // Resize the cropped image to CSS pixel dimensions for display
-  var displayImage = croppedImage.resize({ width: workArea.width, height: workArea.height });
-  var displayDataUrl = displayImage.toDataURL();
+  var displayDataUrl = croppedImage.toDataURL();
 
   var win = createRegionWindow({
     x: workArea.x, y: workArea.y,
@@ -657,6 +656,7 @@ function startRegionCapture(fullScreenshotBuffer) {
       win.webContents.send('region-capture-start', {
         dataUrl: displayDataUrl,
         screenBounds: { width: workArea.width, height: workArea.height },
+        dpr: scaleFactor,
       });
     });
     win.show();

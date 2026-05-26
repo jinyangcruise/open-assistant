@@ -412,16 +412,18 @@ function buildFinalImage() {
   var sel = state.sel;
   if (!sel || sel.w <= 0 || sel.h <= 0) return null;
 
+  var dpr = window.devicePixelRatio || 1;
   var finalCanvas = document.createElement('canvas');
-  finalCanvas.width = Math.round(sel.w);
-  finalCanvas.height = Math.round(sel.h);
+  finalCanvas.width = Math.round(sel.w * dpr);
+  finalCanvas.height = Math.round(sel.h * dpr);
   var fctx = finalCanvas.getContext('2d');
+  fctx.scale(dpr, dpr);
 
-  // 1. Draw cropped screenshot region
+  // 1. Draw cropped screenshot region at physical resolution
   fctx.drawImage(
     state.screenshotImage,
-    sel.x, sel.y, sel.w, sel.h, // source
-    0, 0, sel.w, sel.h          // dest
+    sel.x * dpr, sel.y * dpr, sel.w * dpr, sel.h * dpr, // source (physical pixels)
+    0, 0, sel.w, sel.h                                    // dest (CSS px, scaled by dpr)
   );
 
   // 2. Draw annotations (translated to local coordinates)
@@ -525,8 +527,8 @@ function buildFinalImage() {
     // Re-draw that portion from screenshot only (no annotations on top of toolbar)
     fctx.drawImage(
       state.screenshotImage,
-      ox, oy, ow, oh,     // source from full screenshot
-      ox - sel.x, oy - sel.y, ow, oh  // dest in final canvas
+      ox * dpr, oy * dpr, ow * dpr, oh * dpr, // source (physical pixels)
+      ox - sel.x, oy - sel.y, ow, oh           // dest (CSS px, scaled by dpr)
     );
   }
 
@@ -836,9 +838,18 @@ document.addEventListener('DOMContentLoaded', function() {
   window.regionCaptureAPI.onCaptureStart(function(data) {
     state.screenW = data.screenBounds.width;
     state.screenH = data.screenBounds.height;
+    var dpr = data.dpr || 1;
 
-    canvas.width = data.screenBounds.width;
-    canvas.height = data.screenBounds.height;
+    // Set canvas to physical pixel dimensions for sharp rendering
+    // Use CSS to constrain display size to the window
+    canvas.width = Math.round(data.screenBounds.width * dpr);
+    canvas.height = Math.round(data.screenBounds.height * dpr);
+    canvas.style.width = data.screenBounds.width + 'px';
+    canvas.style.height = data.screenBounds.height + 'px';
+
+    // Scale context so all drawing uses CSS pixel coordinates
+    // (mouse events also use CSS pixels, matching perfectly)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     var img = new Image();
     img.onload = function() {
