@@ -175,11 +175,11 @@ function createRegionWindow(bounds) {
     width: Math.round(bounds.width),
     height: Math.round(bounds.height),
     frame: false,
-    transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
     show: false,
+    enableLargerThanScreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'region-capture', 'preload.js'),
       contextIsolation: true,
@@ -580,23 +580,30 @@ function registerAllShortcuts() {
  */
 function startRegionCapture(fullScreenshotBuffer) {
   var fullImage = nativeImage.createFromBuffer(fullScreenshotBuffer);
-  var physSize = fullImage.getSize();
 
-  // Get virtual screen bounds (CSS pixels)
-  var displays = screen.getAllDisplays();
-  var vx = Math.min.apply(null, displays.map(function(d) { return d.bounds.x; }));
-  var vy = Math.min.apply(null, displays.map(function(d) { return d.bounds.y; }));
-  var vw = Math.max.apply(null, displays.map(function(d) { return d.bounds.x + d.bounds.width; })) - vx;
-  var vh = Math.max.apply(null, displays.map(function(d) { return d.bounds.y + d.bounds.height; })) - vy;
+  // Use the primary display's WORK AREA (excludes taskbar).
+  // Windows constrains BrowserWindows to the work area, so the window can't
+  // cover the taskbar anyway. By matching the screenshot to the work area,
+  // window, canvas, and image are all the same size — no stretching.
+  var primaryDisplay = screen.getPrimaryDisplay();
+  var scaleFactor = primaryDisplay.scaleFactor;
+  var workArea = primaryDisplay.workArea; // CSS pixels
 
-  // Resize screenshot to CSS pixel dimensions for display in overlay
-  var scaleFactor = screen.getPrimaryDisplay().scaleFactor;
-  var displayW = Math.round(physSize.width / scaleFactor);
-  var displayH = Math.round(physSize.height / scaleFactor);
-  var displayImage = fullImage.resize({ width: displayW, height: displayH });
+  // Crop the full-resolution screenshot to the work area (physical pixels)
+  var cropX = Math.round(workArea.x * scaleFactor);
+  var cropY = Math.round(workArea.y * scaleFactor);
+  var cropW = Math.round(workArea.width * scaleFactor);
+  var cropH = Math.round(workArea.height * scaleFactor);
+  var croppedImage = fullImage.crop({ x: cropX, y: cropY, width: cropW, height: cropH });
+
+  // Resize the cropped image to CSS pixel dimensions for display
+  var displayImage = croppedImage.resize({ width: workArea.width, height: workArea.height });
   var displayDataUrl = displayImage.toDataURL();
 
-  var win = createRegionWindow({ x: vx, y: vy, width: vw, height: vh });
+  var win = createRegionWindow({
+    x: workArea.x, y: workArea.y,
+    width: workArea.width, height: workArea.height,
+  });
 
   return new Promise(function(resolve, reject) {
     var settled = false;
@@ -649,7 +656,7 @@ function startRegionCapture(fullScreenshotBuffer) {
     win.webContents.on('did-finish-load', function() {
       win.webContents.send('region-capture-start', {
         dataUrl: displayDataUrl,
-        screenBounds: { width: vw, height: vh },
+        screenBounds: { width: workArea.width, height: workArea.height },
       });
     });
     win.show();
