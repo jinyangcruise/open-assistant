@@ -52,11 +52,11 @@ var state = {
   currentTool: 'shape',
 
   // Pencil settings
-  pencilColor: '#FFD700',
+  pencilColor: '#FF6B6B',
   pencilWidth: 3,
 
   // Text
-  textColor: '#FFD700',
+  textColor: '#FF6B6B',
   textFontSize: 16,
   isDraggingText: false,
   dragTextIndex: -1,
@@ -484,7 +484,7 @@ function commitTextInput() {
     text: text,
     x: textPlacePos.x,
     y: textPlacePos.y + 5,
-    color: '#FFD700',
+    color: state.textColor,
     fontSize: 16,
   });
   render();
@@ -997,6 +997,10 @@ document.addEventListener('DOMContentLoaded', function() {
   pencilSettings = document.getElementById('pencilSettings');
   textOverlay = document.getElementById('textInputOverlay');
   textArea = document.getElementById('textInputArea');
+
+  // Initial pencil button color indicator
+  var pencilBtn = toolbar.querySelector('[data-tool="pencil"]');
+  if (pencilBtn) pencilBtn.style.color = state.pencilColor;
 
   // Listen for capture start from main process
   window.regionCaptureAPI.onCaptureStart(function(data) {
