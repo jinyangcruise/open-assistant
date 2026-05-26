@@ -59,6 +59,60 @@ canvas#displayCanvas {
   padding: 0 4px;
   letter-spacing: 0.5px;
 }
+
+/* ── Pencil settings popup ── */
+#pencilSettings {
+  display: none;
+  position: fixed;
+  z-index: 20;
+  background: rgba(42, 42, 42, 0.94);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  flex-direction: column;
+  gap: 6px;
+}
+#pencilSettings .setting-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#pencilSettings .setting-label {
+  font-size: 10px;
+  color: #888;
+  letter-spacing: 0.5px;
+  min-width: 36px;
+}
+.color-swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.color-swatch:hover { transform: scale(1.15); }
+.color-swatch.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
+.width-sample {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.width-sample:hover { background: rgba(255,255,255,0.1); }
+.width-sample.active { border-color: #FFD700; background: rgba(255,215,0,0.1); }
+.width-sample .line {
+  background: #ccc;
+  border-radius: 2px;
+  width: 18px;
+}
 </style>
 </head>
 <body>
@@ -75,6 +129,23 @@ canvas#displayCanvas {
   <span class="toolbar-sep"></span>
   <button class="toolbar-btn confirm" id="confirmBtn" title="Confirm">✓</button>
   <button class="toolbar-btn cancel" id="cancelBtn" title="Cancel">✕</button>
+</div>
+<div id="pencilSettings">
+  <div class="setting-row">
+    <span class="setting-label">COLOR</span>
+    <div class="color-swatch active" data-color="#FFD700" style="background:#FFD700"></div>
+    <div class="color-swatch" data-color="#FF6B6B" style="background:#FF6B6B"></div>
+    <div class="color-swatch" data-color="#4A9EFF" style="background:#4A9EFF"></div>
+    <div class="color-swatch" data-color="#4ADE80" style="background:#4ADE80"></div>
+    <div class="color-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></div>
+  </div>
+  <div class="setting-row">
+    <span class="setting-label">WIDTH</span>
+    <div class="width-sample active" data-width="3"><div class="line" style="height:2px"></div></div>
+    <div class="width-sample" data-width="5"><div class="line" style="height:4px"></div></div>
+    <div class="width-sample" data-width="8"><div class="line" style="height:6px"></div></div>
+    <div class="width-sample" data-width="12"><div class="line" style="height:8px"></div></div>
+  </div>
 </div>
 <script src="capture.js"></script>
 </body>

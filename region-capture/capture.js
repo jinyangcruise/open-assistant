@@ -51,6 +51,10 @@ var state = {
   // Tool: 'move' | 'pencil' | 'shape' | 'eraser'
   currentTool: 'shape',
 
+  // Pencil settings
+  pencilColor: '#FFD700',
+  pencilWidth: 3,
+
   // Annotations
   annotations: [], // array of stroke objects
   redoStack: [], // undone annotations for redo
@@ -60,7 +64,7 @@ var state = {
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────
 
-var canvas, ctx, toolbar;
+var canvas, ctx, toolbar, pencilSettings;
 
 // ─── Handle rect helper ────────────────────────────────────────────────────
 
@@ -440,7 +444,7 @@ function onMouseDown(e) {
 
   if (state.currentTool === 'pencil' && state.sel) {
     state.redoStack = [];
-    state.currentStroke = { type: 'pencil', color: '#FFD700', width: 3, points: [{ x: mx, y: my }] };
+    state.currentStroke = { type: 'pencil', color: state.pencilColor, width: state.pencilWidth, points: [{ x: mx, y: my }] };
     state.annotations.push(state.currentStroke);
     render();
     return;
@@ -620,6 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
   canvas = document.getElementById('displayCanvas');
   ctx = canvas.getContext('2d');
   toolbar = document.getElementById('toolbar');
+  pencilSettings = document.getElementById('pencilSettings');
 
   // Listen for capture start from main process
   window.regionCaptureAPI.onCaptureStart(function(data) {
@@ -650,10 +655,45 @@ document.addEventListener('DOMContentLoaded', function() {
         undoLastAnnotation();
       } else if (tool === 'redo') {
         redoAnnotation();
+      } else if (tool === 'pencil' && state.currentTool === 'pencil') {
+        // Already in pencil mode → toggle settings panel
+        togglePencilSettings();
       } else {
+        pencilSettings.style.display = 'none';
         selectTool(tool);
       }
     });
+  });
+
+  // Pencil settings: color swatches
+  pencilSettings.querySelectorAll('.color-swatch').forEach(function(el) {
+    el.addEventListener('click', function() {
+      pencilSettings.querySelectorAll('.color-swatch').forEach(function(s) { s.classList.remove('active'); });
+      this.classList.add('active');
+      state.pencilColor = this.getAttribute('data-color');
+      // Update the pencil button's active color indicator
+      var pencilBtn = toolbar.querySelector('[data-tool="pencil"]');
+      if (pencilBtn) pencilBtn.style.color = state.pencilColor;
+    });
+  });
+
+  // Pencil settings: width samples
+  pencilSettings.querySelectorAll('.width-sample').forEach(function(el) {
+    el.addEventListener('click', function() {
+      pencilSettings.querySelectorAll('.width-sample').forEach(function(s) { s.classList.remove('active'); });
+      this.classList.add('active');
+      state.pencilWidth = parseInt(this.getAttribute('data-width'));
+    });
+  });
+
+  // Close pencil settings when clicking outside
+  document.addEventListener('mousedown', function(e) {
+    if (pencilSettings.style.display !== 'none') {
+      var target = e.target;
+      if (!pencilSettings.contains(target) && !toolbar.contains(target)) {
+        pencilSettings.style.display = 'none';
+      }
+    }
   });
 
   document.getElementById('confirmBtn').addEventListener('click', function() {
@@ -667,6 +707,50 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Escape key
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') onCancel();
+    if (e.key === 'Escape') {
+      if (pencilSettings.style.display !== 'none') {
+        pencilSettings.style.display = 'none';
+      } else {
+        onCancel();
+      }
+    }
   });
 });
+
+// ─── Pencil settings toggle & position ─────────────────────────────────────
+
+function togglePencilSettings() {
+  if (pencilSettings.style.display === 'none' || pencilSettings.style.display === '') {
+    showPencilSettings();
+  } else {
+    pencilSettings.style.display = 'none';
+  }
+}
+
+function showPencilSettings() {
+  pencilSettings.style.display = 'flex';
+
+  // Position the settings panel below the toolbar, aligned with the pencil button
+  var tbRect = toolbar.getBoundingClientRect();
+  var pencilBtn = toolbar.querySelector('[data-tool="pencil"]');
+  var btnRect = pencilBtn ? pencilBtn.getBoundingClientRect() : tbRect;
+
+  var panelW = pencilSettings.offsetWidth || 200;
+  var panelH = pencilSettings.offsetHeight || 80;
+  var sw = state.screenW;
+  var sh = state.screenH;
+
+  // Center the panel on the pencil button horizontally
+  var px = btnRect.left + btnRect.width / 2 - panelW / 2;
+  // Place below the toolbar
+  var py = tbRect.bottom + 4;
+
+  // Clamp to screen
+  px = Math.max(4, Math.min(sw - panelW - 4, px));
+  if (py + panelH > sh - 4) {
+    py = tbRect.top - panelH - 4;
+  }
+
+  pencilSettings.style.left = px + 'px';
+  pencilSettings.style.top = py + 'px';
+}
