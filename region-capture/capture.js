@@ -652,8 +652,8 @@ function onMouseMove(e) {
     return;
   }
 
-  // Shape drawing (update end point)
-  if (state.currentStroke && state.currentStroke.type === 'rect' && state.shapeStart) {
+  // Shape drawing (update end point for all shape types)
+  if (state.currentStroke && state.shapeStart && state.currentStroke.end) {
     state.currentStroke.end = { x: mx, y: my };
     render();
     return;
