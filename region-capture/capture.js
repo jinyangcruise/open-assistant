@@ -305,7 +305,7 @@ function updateToolbar() {
   toolbar.style.top = ty + 'px';
 
   // Also reposition shape toolbar if it's visible
-  if (shapeToolbar && shapeToolbar.style.display === 'flex') {
+  if (shapeToolbar && state.currentTool === 'shape') {
     positionShapeToolbar();
   }
 }
@@ -768,6 +768,9 @@ function positionShapeToolbar() {
   var sel = state.sel;
   if (!sel || sel.w <= 0 || sel.h <= 0) return;
 
+  // Make visible first so offsetWidth/Height are valid
+  shapeToolbar.style.display = 'flex';
+
   var tbW = shapeToolbar.offsetWidth || 220;
   var tbH = shapeToolbar.offsetHeight || 36;
   var sw = state.screenW;
@@ -777,13 +780,13 @@ function positionShapeToolbar() {
   var cx = sel.x + sel.w / 2;
   var tx = Math.max(4, Math.min(sw - tbW - 4, cx - tbW / 2));
 
-  // Try placing above the main toolbar, or below the selection, or above the selection
+  // Try placing BELOW the main toolbar first, then above
   var mainTbRect = toolbar.getBoundingClientRect();
-  var ty = mainTbRect.top - tbH - 4;
-  if (ty < 4) {
-    ty = mainTbRect.bottom + 4;
-  }
+  var ty = mainTbRect.bottom + 4;
   if (ty + tbH > sh - 4) {
+    ty = mainTbRect.top - tbH - 4;
+  }
+  if (ty < 4) {
     ty = Math.max(4, sel.y - tbH - 4);
   }
 
@@ -897,6 +900,10 @@ document.addEventListener('DOMContentLoaded', function() {
   fillPopup.style.display = 'none';
   strokePopup.style.display = 'none';
 
+  // Initial fill button state (default shape is rect → fill enabled)
+  document.getElementById('shapeFillBtn').style.opacity = '1';
+  document.getElementById('shapeFillBtn').style.cursor = 'pointer';
+
   // Shape type buttons
   shapeToolbar.querySelectorAll('[data-shape]').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -938,7 +945,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Fill popup: None button
   document.getElementById('fillNone').addEventListener('click', function() {
-    fillPopup.querySelectorAll('.none-btn, .swatch').forEach(function(el) { el.classList.remove('active'); });
+    fillPopup.querySelectorAll('.swatch-none, .swatch').forEach(function(el) { el.classList.remove('active'); });
     this.classList.add('active');
     state.shapeFillColor = null;
     document.getElementById('fillPreview').style.background = 'transparent';
@@ -947,7 +954,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Fill popup: color swatches
   fillPopup.querySelectorAll('.swatch').forEach(function(el) {
     el.addEventListener('click', function() {
-      fillPopup.querySelectorAll('.none-btn, .swatch').forEach(function(s) { s.classList.remove('active'); });
+      fillPopup.querySelectorAll('.swatch-none, .swatch').forEach(function(s) { s.classList.remove('active'); });
       this.classList.add('active');
       state.shapeFillColor = this.getAttribute('data-fill');
       var opacity = parseInt(document.getElementById('fillOpacity').value) / 100;
@@ -968,7 +975,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Stroke popup: None button
   document.getElementById('strokeNone').addEventListener('click', function() {
-    strokePopup.querySelectorAll('.none-btn, .swatch').forEach(function(el) { el.classList.remove('active'); });
+    strokePopup.querySelectorAll('.swatch-none, .swatch').forEach(function(el) { el.classList.remove('active'); });
     this.classList.add('active');
     state.shapeStrokeColor = null;
     document.getElementById('strokePreview').style.background = 'transparent';
@@ -977,7 +984,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Stroke popup: color swatches
   strokePopup.querySelectorAll('.swatch').forEach(function(el) {
     el.addEventListener('click', function() {
-      strokePopup.querySelectorAll('.none-btn, .swatch').forEach(function(s) { s.classList.remove('active'); });
+      strokePopup.querySelectorAll('.swatch-none, .swatch').forEach(function(s) { s.classList.remove('active'); });
       this.classList.add('active');
       state.shapeStrokeColor = this.getAttribute('data-stroke');
       var opacity = parseInt(document.getElementById('strokeOpacity').value) / 100;

@@ -136,6 +136,27 @@ canvas#displayCanvas {
 }
 .settings-popup .swatch:hover { transform: scale(1.15); }
 .settings-popup .swatch.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
+.settings-popup .swatch-none {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  position: relative;
+  background: transparent;
+}
+.settings-popup .swatch-none::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 2px; height: 18px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 1px;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.settings-popup .swatch-none:hover { transform: scale(1.15); border-color: rgba(255,255,255,0.6); }
+.settings-popup .swatch-none.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
 .settings-popup .opacity-row {
   display: flex;
   align-items: center;
@@ -281,9 +302,7 @@ canvas#displayCanvas {
 <div id="fillPopup" class="settings-popup">
   <div class="popup-row">
     <span class="popup-label">FILL</span>
-    <button class="none-btn active" id="fillNone">None</button>
-  </div>
-  <div class="popup-row">
+    <div class="swatch-none active" id="fillNone" title="No fill"></div>
     <div class="swatch" data-fill="#FFD700" style="background:#FFD700"></div>
     <div class="swatch" data-fill="#FF6B6B" style="background:#FF6B6B"></div>
     <div class="swatch" data-fill="#4A9EFF" style="background:#4A9EFF"></div>
@@ -301,9 +320,7 @@ canvas#displayCanvas {
 <div id="strokePopup" class="settings-popup">
   <div class="popup-row">
     <span class="popup-label">STRK</span>
-    <button class="none-btn" id="strokeNone">None</button>
-  </div>
-  <div class="popup-row">
+    <div class="swatch-none" id="strokeNone" title="No stroke"></div>
     <div class="swatch active" data-stroke="#FF6B6B" style="background:#FF6B6B"></div>
     <div class="swatch" data-stroke="#FFD700" style="background:#FFD700"></div>
     <div class="swatch" data-stroke="#4A9EFF" style="background:#4A9EFF"></div>
