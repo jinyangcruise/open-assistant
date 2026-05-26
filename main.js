@@ -176,9 +176,9 @@ function createRegionWindow(bounds) {
     height: Math.round(bounds.height),
     frame: false,
     alwaysOnTop: true,
-    skipTaskbar: true,
     resizable: false,
-    show: false,
+    show: true,
+    backgroundColor: '#000',
     enableLargerThanScreen: true,
     webPreferences: {
       preload: path.join(__dirname, 'region-capture', 'preload.js'),
@@ -195,6 +195,66 @@ function createRegionWindow(bounds) {
   });
 
   return regionWindow;
+}
+
+/**
+ * Force a BrowserWindow to the foreground on Windows using native API calls.
+ * Circumvents Windows' focus-stealing prevention for background processes.
+ */
+function forceWindowForeground(win) {
+  if (process.platform !== 'win32') { win.focus(); return; }
+  if (!win || win.isDestroyed()) return;
+
+  try {
+    var hwndBuffer = win.getNativeWindowHandle();
+    var hwndHex = Array.prototype.map.call(hwndBuffer, function(b) {
+      return ('0' + b.toString(16)).slice(-2);
+    }).join('').toUpperCase();
+    while (hwndHex.length < 8) hwndHex = '0' + hwndHex;
+
+    var fs = require('fs');
+    var path = require('path');
+    var os = require('os');
+    var tempFile = path.join(os.tmpdir(), 'force-fg.ps1');
+    fs.writeFileSync(tempFile, [
+      'Add-Type @"',
+      'using System;',
+      'using System.Runtime.InteropServices;',
+      'public class W32 {',
+      '  [DllImport("user32.dll")]',
+      '  public static extern bool SetForegroundWindow(IntPtr hWnd);',
+      '  [DllImport("user32.dll")]',
+      '  public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);',
+      '  [DllImport("user32.dll")]',
+      '  public static extern IntPtr GetForegroundWindow();',
+      '  [DllImport("user32.dll")]',
+      '  public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr zero);',
+      '  [DllImport("user32.dll")]',
+      '  public static extern uint GetCurrentThreadId();',
+      '  [DllImport("user32.dll")]',
+      '  public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);',
+      '}',
+      '"@',
+      '$hwnd = [IntPtr]::Parse("0x' + hwndHex + '")',
+      '$fgHwnd = [W32]::GetForegroundWindow()',
+      'if ($fgHwnd -eq $hwnd) { exit 0 }',
+      '$fgTid = [W32]::GetWindowThreadProcessId($fgHwnd, [IntPtr]::Zero)',
+      '$curTid = [W32]::GetCurrentThreadId()',
+      '[W32]::AttachThreadInput($curTid, $fgTid, $true) | Out-Null',
+      '[W32]::ShowWindowAsync($hwnd, 5) | Out-Null',
+      '[W32]::SetForegroundWindow($hwnd) | Out-Null',
+      '[W32]::AttachThreadInput($curTid, $fgTid, $false) | Out-Null',
+    ].join('\n'));
+    var execSync = require('child_process').execSync;
+    execSync('powershell -NoProfile -ExecutionPolicy Bypass -File "' + tempFile + '"', {
+      timeout: 5000,
+      windowsHide: true,
+    });
+    try { fs.unlinkSync(tempFile); } catch (e) {}
+  } catch (e) {
+    console.warn('forceWindowForeground failed:', e.message);
+    try { win.focus(); } catch (e2) {}
+  }
 }
 
 // Create system tray
@@ -659,7 +719,8 @@ function startRegionCapture(fullScreenshotBuffer) {
         dpr: scaleFactor,
       });
     });
-    win.show();
+    // Force window to foreground using Windows API (circumvents focus-stealing prevention)
+    forceWindowForeground(win);
   });
 }
 

@@ -1025,6 +1025,9 @@ document.addEventListener('DOMContentLoaded', function() {
     img.onload = function() {
       state.screenshotImage = img;
       render();
+      // Activate the window so mouse events work immediately
+      window.focus();
+      canvas.focus();
     };
     img.src = data.dataUrl;
   });
@@ -1201,6 +1204,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Close fill/stroke popups when clicking outside
   document.addEventListener('mousedown', function(e) {
+    // Failsafe: if no selection yet and canvas is the target, start selection
+    // (handles edge case where canvas listener doesn't fire on first click)
+    if (!state.sel && e.target === canvas && state.screenshotImage) {
+      var pos = getMousePos(e);
+      state.isSelecting = true;
+      state.selectStart = { x: pos.x, y: pos.y };
+    }
+
     if (pencilSettings.style.display !== 'none') {
       var target = e.target;
       if (!pencilSettings.contains(target) && !toolbar.contains(target)) {
