@@ -55,6 +55,13 @@ var state = {
   pencilColor: '#FFD700',
   pencilWidth: 3,
 
+  // Shape settings
+  shapeType: 'rect', // 'rect' | 'ellipse' | 'line' | 'arrow'
+  shapeFillColor: null, // null = no fill
+  shapeFillOpacity: 0.5,
+  shapeStrokeColor: '#FF6B6B',
+  shapeStrokeOpacity: 1,
+
   // Annotations
   annotations: [], // array of stroke objects
   redoStack: [], // undone annotations for redo
@@ -64,7 +71,7 @@ var state = {
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────
 
-var canvas, ctx, toolbar, pencilSettings;
+var canvas, ctx, toolbar, pencilSettings, shapeToolbar, fillPopup, strokePopup;
 
 // ─── Handle rect helper ────────────────────────────────────────────────────
 
@@ -175,24 +182,88 @@ function renderAnnotations(context) {
   var anns = state.annotations;
   for (var i = 0; i < anns.length; i++) {
     var s = anns[i];
-    context.beginPath();
-    context.strokeStyle = s.color;
-    context.lineWidth = s.width;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    if (s.type === 'pencil' && s.points.length >= 1) {
+    context.save();
+
+    if (s.type === 'pencil') {
+      if (!s.points || s.points.length < 1) { context.restore(); continue; }
+      context.beginPath();
+      context.strokeStyle = s.color;
+      context.lineWidth = s.width;
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
       context.moveTo(s.points[0].x, s.points[0].y);
       for (var j = 1; j < s.points.length; j++) {
         context.lineTo(s.points[j].x, s.points[j].y);
       }
       context.stroke();
-    } else if (s.type === 'rect') {
-      var rx = Math.min(s.start.x, s.end.x);
-      var ry = Math.min(s.start.y, s.end.y);
-      var rw = Math.abs(s.end.x - s.start.x);
-      var rh = Math.abs(s.end.y - s.start.y);
-      context.strokeRect(rx, ry, rw, rh);
+      context.restore();
+      continue;
     }
+
+    // Shape types: rect, ellipse, line, arrow
+    var sx = Math.min(s.start.x, s.end.x);
+    var sy = Math.min(s.start.y, s.end.y);
+    var sw = Math.abs(s.end.x - s.start.x);
+    var sh = Math.abs(s.end.y - s.start.y);
+    var cx = (s.start.x + s.end.x) / 2;
+    var cy = (s.start.y + s.end.y) / 2;
+
+    // Fill (for rect and ellipse)
+    if (s.fillColor && (s.type === 'rect' || s.type === 'ellipse')) {
+      var fillAlpha = s.fillOpacity !== undefined ? s.fillOpacity : 1;
+      context.fillStyle = s.fillColor;
+      context.globalAlpha = fillAlpha;
+      context.beginPath();
+      if (s.type === 'rect') {
+        context.rect(sx, sy, sw, sh);
+      } else if (s.type === 'ellipse') {
+        context.ellipse(cx, cy, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+      }
+      context.fill();
+      context.globalAlpha = 1;
+    }
+
+    // Stroke
+    var strokeAlpha = s.strokeOpacity !== undefined ? s.strokeOpacity : 1;
+    context.beginPath();
+    context.strokeStyle = s.color;
+    context.lineWidth = s.width || 2;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.globalAlpha = strokeAlpha;
+
+    if (s.type === 'rect') {
+      context.rect(sx, sy, sw, sh);
+      context.stroke();
+    } else if (s.type === 'ellipse') {
+      context.ellipse(cx, cy, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+      context.stroke();
+    } else if (s.type === 'line' || s.type === 'arrow') {
+      context.moveTo(s.start.x, s.start.y);
+      context.lineTo(s.end.x, s.end.y);
+      context.stroke();
+      // Arrowhead
+      if (s.type === 'arrow') {
+        var angle = Math.atan2(s.end.y - s.start.y, s.end.x - s.start.x);
+        var headLen = 12;
+        var headAngle = 0.5; // radians
+        context.beginPath();
+        context.moveTo(s.end.x, s.end.y);
+        context.lineTo(
+          s.end.x - headLen * Math.cos(angle - headAngle),
+          s.end.y - headLen * Math.sin(angle - headAngle)
+        );
+        context.moveTo(s.end.x, s.end.y);
+        context.lineTo(
+          s.end.x - headLen * Math.cos(angle + headAngle),
+          s.end.y - headLen * Math.sin(angle + headAngle)
+        );
+        context.stroke();
+      }
+    }
+
+    context.globalAlpha = 1;
+    context.restore();
   }
 }
 
@@ -232,6 +303,11 @@ function updateToolbar() {
 
   toolbar.style.left = tx + 'px';
   toolbar.style.top = ty + 'px';
+
+  // Also reposition shape toolbar if it's visible
+  if (shapeToolbar && shapeToolbar.style.display === 'flex') {
+    positionShapeToolbar();
+  }
 }
 
 // ─── Selection normalization ───────────────────────────────────────────────
@@ -351,25 +427,81 @@ function buildFinalImage() {
   // 2. Draw annotations (translated to local coordinates)
   for (var i = 0; i < state.annotations.length; i++) {
     var s = state.annotations[i];
-    fctx.beginPath();
-    fctx.strokeStyle = s.color;
-    fctx.lineWidth = s.width;
-    fctx.lineCap = 'round';
-    fctx.lineJoin = 'round';
+    fctx.save();
 
-    if (s.type === 'pencil' && s.points.length >= 1) {
+    if (s.type === 'pencil') {
+      if (!s.points || s.points.length < 1) { fctx.restore(); continue; }
+      fctx.beginPath();
+      fctx.strokeStyle = s.color;
+      fctx.lineWidth = s.width;
+      fctx.lineCap = 'round';
+      fctx.lineJoin = 'round';
       fctx.moveTo(s.points[0].x - sel.x, s.points[0].y - sel.y);
       for (var j = 1; j < s.points.length; j++) {
         fctx.lineTo(s.points[j].x - sel.x, s.points[j].y - sel.y);
       }
       fctx.stroke();
-    } else if (s.type === 'rect') {
-      var rx = Math.min(s.start.x, s.end.x) - sel.x;
-      var ry = Math.min(s.start.y, s.end.y) - sel.y;
-      var rw = Math.abs(s.end.x - s.start.x);
-      var rh = Math.abs(s.end.y - s.start.y);
-      fctx.strokeRect(rx, ry, rw, rh);
+      fctx.restore();
+      continue;
     }
+
+    // Shape types
+    var sx = Math.min(s.start.x, s.end.x) - sel.x;
+    var sy = Math.min(s.start.y, s.end.y) - sel.y;
+    var sw = Math.abs(s.end.x - s.start.x);
+    var sh = Math.abs(s.end.y - s.start.y);
+    var cx = (s.start.x + s.end.x) / 2 - sel.x;
+    var cy = (s.start.y + s.end.y) / 2 - sel.y;
+
+    var strokeAlpha = s.strokeOpacity !== undefined ? s.strokeOpacity : 1;
+
+    // Fill
+    if (s.fillColor && (s.type === 'rect' || s.type === 'ellipse')) {
+      var fillAlpha = s.fillOpacity !== undefined ? s.fillOpacity : 1;
+      fctx.fillStyle = s.fillColor;
+      fctx.globalAlpha = fillAlpha;
+      fctx.beginPath();
+      if (s.type === 'rect') fctx.rect(sx, sy, sw, sh);
+      else if (s.type === 'ellipse') fctx.ellipse(cx, cy, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+      fctx.fill();
+      fctx.globalAlpha = 1;
+    }
+
+    // Stroke
+    fctx.beginPath();
+    fctx.strokeStyle = s.color;
+    fctx.lineWidth = s.width || 2;
+    fctx.lineCap = 'round';
+    fctx.lineJoin = 'round';
+    fctx.globalAlpha = strokeAlpha;
+
+    if (s.type === 'rect') {
+      fctx.rect(sx, sy, sw, sh);
+      fctx.stroke();
+    } else if (s.type === 'ellipse') {
+      fctx.ellipse(cx, cy, sw / 2, sh / 2, 0, 0, Math.PI * 2);
+      fctx.stroke();
+    } else if (s.type === 'line' || s.type === 'arrow') {
+      var lx1 = s.start.x - sel.x, ly1 = s.start.y - sel.y;
+      var lx2 = s.end.x - sel.x, ly2 = s.end.y - sel.y;
+      fctx.moveTo(lx1, ly1);
+      fctx.lineTo(lx2, ly2);
+      fctx.stroke();
+      if (s.type === 'arrow') {
+        var angle = Math.atan2(ly2 - ly1, lx2 - lx1);
+        var headLen = 12;
+        var headAngle = 0.5;
+        fctx.beginPath();
+        fctx.moveTo(lx2, ly2);
+        fctx.lineTo(lx2 - headLen * Math.cos(angle - headAngle), ly2 - headLen * Math.sin(angle - headAngle));
+        fctx.moveTo(lx2, ly2);
+        fctx.lineTo(lx2 - headLen * Math.cos(angle + headAngle), ly2 - headLen * Math.sin(angle + headAngle));
+        fctx.stroke();
+      }
+    }
+
+    fctx.globalAlpha = 1;
+    fctx.restore();
   }
 
   // 3. Clear toolbar overlap (if toolbar is over the selection)
@@ -453,7 +585,15 @@ function onMouseDown(e) {
   if (state.currentTool === 'shape' && state.sel) {
     state.redoStack = [];
     state.shapeStart = { x: mx, y: my };
-    state.currentStroke = { type: 'rect', color: '#FF6B6B', width: 2, start: { x: mx, y: my }, end: { x: mx, y: my } };
+    state.currentStroke = {
+      type: state.shapeType,
+      color: state.shapeStrokeColor,
+      strokeOpacity: state.shapeStrokeOpacity,
+      fillColor: state.shapeFillColor,
+      fillOpacity: state.shapeFillOpacity,
+      width: 2,
+      start: { x: mx, y: my }, end: { x: mx, y: my }
+    };
     state.annotations.push(state.currentStroke);
     render();
     return;
@@ -586,6 +726,16 @@ function selectTool(tool) {
   toolbar.querySelectorAll('.toolbar-btn[data-tool]').forEach(function(b) {
     b.classList.toggle('active', b.getAttribute('data-tool') === tool);
   });
+
+  // Show/hide shape toolbar
+  if (tool === 'shape') {
+    positionShapeToolbar();
+    shapeToolbar.style.display = 'flex';
+  } else {
+    shapeToolbar.style.display = 'none';
+    fillPopup.style.display = 'none';
+    strokePopup.style.display = 'none';
+  }
 }
 
 // ─── Undo ──────────────────────────────────────────────────────────────────
@@ -610,6 +760,59 @@ function redoAnnotation() {
   var a = state.redoStack.pop();
   state.annotations.push(a);
   render();
+}
+
+// ─── Shape toolbar positioning ─────────────────────────────────────────────
+
+function positionShapeToolbar() {
+  var sel = state.sel;
+  if (!sel || sel.w <= 0 || sel.h <= 0) return;
+
+  var tbW = shapeToolbar.offsetWidth || 220;
+  var tbH = shapeToolbar.offsetHeight || 36;
+  var sw = state.screenW;
+  var sh = state.screenH;
+
+  // Center on selection horizontally
+  var cx = sel.x + sel.w / 2;
+  var tx = Math.max(4, Math.min(sw - tbW - 4, cx - tbW / 2));
+
+  // Try placing above the main toolbar, or below the selection, or above the selection
+  var mainTbRect = toolbar.getBoundingClientRect();
+  var ty = mainTbRect.top - tbH - 4;
+  if (ty < 4) {
+    ty = mainTbRect.bottom + 4;
+  }
+  if (ty + tbH > sh - 4) {
+    ty = Math.max(4, sel.y - tbH - 4);
+  }
+
+  shapeToolbar.style.left = tx + 'px';
+  shapeToolbar.style.top = ty + 'px';
+}
+
+// ─── Generic popup positioning ─────────────────────────────────────────────
+
+function positionPopup(popup, anchorEl) {
+  popup.style.display = 'flex';
+  var anchorRect = anchorEl.getBoundingClientRect();
+  var popW = popup.offsetWidth || 200;
+  var popH = popup.offsetHeight || 120;
+  var sw = state.screenW;
+  var sh = state.screenH;
+
+  // Center on anchor button horizontally
+  var px = anchorRect.left + anchorRect.width / 2 - popW / 2;
+  // Place below anchor
+  var py = anchorRect.bottom + 4;
+
+  px = Math.max(4, Math.min(sw - popW - 4, px));
+  if (py + popH > sh - 4) {
+    py = anchorRect.top - popH - 4;
+  }
+
+  popup.style.left = px + 'px';
+  popup.style.top = py + 'px';
 }
 
 // ─── Cancel ────────────────────────────────────────────────────────────────
@@ -686,12 +889,131 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 
-  // Close pencil settings when clicking outside
+  // ── Shape toolbar ──
+  shapeToolbar = document.getElementById('shapeToolbar');
+  fillPopup = document.getElementById('fillPopup');
+  strokePopup = document.getElementById('strokePopup');
+  shapeToolbar.style.display = 'none';
+  fillPopup.style.display = 'none';
+  strokePopup.style.display = 'none';
+
+  // Shape type buttons
+  shapeToolbar.querySelectorAll('[data-shape]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      shapeToolbar.querySelectorAll('[data-shape]').forEach(function(b) { b.classList.remove('active'); });
+      this.classList.add('active');
+      state.shapeType = this.getAttribute('data-shape');
+      // Enable/disable fill button based on shape type
+      var fillBtn = document.getElementById('shapeFillBtn');
+      if (state.shapeType === 'rect' || state.shapeType === 'ellipse') {
+        fillBtn.style.opacity = '1';
+        fillBtn.style.cursor = 'pointer';
+      } else {
+        fillBtn.style.opacity = '0.4';
+        fillBtn.style.cursor = 'default';
+      }
+    });
+  });
+
+  // Fill button → toggle fill popup
+  document.getElementById('shapeFillBtn').addEventListener('click', function() {
+    if (state.shapeType !== 'rect' && state.shapeType !== 'ellipse') return;
+    strokePopup.style.display = 'none';
+    if (fillPopup.style.display === 'flex') {
+      fillPopup.style.display = 'none';
+    } else {
+      positionPopup(fillPopup, this);
+    }
+  });
+
+  // Stroke button → toggle stroke popup
+  document.getElementById('shapeStrokeBtn').addEventListener('click', function() {
+    fillPopup.style.display = 'none';
+    if (strokePopup.style.display === 'flex') {
+      strokePopup.style.display = 'none';
+    } else {
+      positionPopup(strokePopup, this);
+    }
+  });
+
+  // Fill popup: None button
+  document.getElementById('fillNone').addEventListener('click', function() {
+    fillPopup.querySelectorAll('.none-btn, .swatch').forEach(function(el) { el.classList.remove('active'); });
+    this.classList.add('active');
+    state.shapeFillColor = null;
+    document.getElementById('fillPreview').style.background = 'transparent';
+  });
+
+  // Fill popup: color swatches
+  fillPopup.querySelectorAll('.swatch').forEach(function(el) {
+    el.addEventListener('click', function() {
+      fillPopup.querySelectorAll('.none-btn, .swatch').forEach(function(s) { s.classList.remove('active'); });
+      this.classList.add('active');
+      state.shapeFillColor = this.getAttribute('data-fill');
+      var opacity = parseInt(document.getElementById('fillOpacity').value) / 100;
+      document.getElementById('fillPreview').style.background = state.shapeFillColor;
+      document.getElementById('fillPreview').style.opacity = opacity;
+    });
+  });
+
+  // Fill opacity slider
+  document.getElementById('fillOpacity').addEventListener('input', function() {
+    var val = parseInt(this.value);
+    document.getElementById('fillOpacityVal').textContent = val + '%';
+    state.shapeFillOpacity = val / 100;
+    if (state.shapeFillColor) {
+      document.getElementById('fillPreview').style.opacity = val / 100;
+    }
+  });
+
+  // Stroke popup: None button
+  document.getElementById('strokeNone').addEventListener('click', function() {
+    strokePopup.querySelectorAll('.none-btn, .swatch').forEach(function(el) { el.classList.remove('active'); });
+    this.classList.add('active');
+    state.shapeStrokeColor = null;
+    document.getElementById('strokePreview').style.background = 'transparent';
+  });
+
+  // Stroke popup: color swatches
+  strokePopup.querySelectorAll('.swatch').forEach(function(el) {
+    el.addEventListener('click', function() {
+      strokePopup.querySelectorAll('.none-btn, .swatch').forEach(function(s) { s.classList.remove('active'); });
+      this.classList.add('active');
+      state.shapeStrokeColor = this.getAttribute('data-stroke');
+      var opacity = parseInt(document.getElementById('strokeOpacity').value) / 100;
+      document.getElementById('strokePreview').style.background = state.shapeStrokeColor;
+      document.getElementById('strokePreview').style.opacity = opacity;
+    });
+  });
+
+  // Stroke opacity slider
+  document.getElementById('strokeOpacity').addEventListener('input', function() {
+    var val = parseInt(this.value);
+    document.getElementById('strokeOpacityVal').textContent = val + '%';
+    state.shapeStrokeOpacity = val / 100;
+    if (state.shapeStrokeColor) {
+      document.getElementById('strokePreview').style.opacity = val / 100;
+    }
+  });
+
+  // Close fill/stroke popups when clicking outside
   document.addEventListener('mousedown', function(e) {
     if (pencilSettings.style.display !== 'none') {
       var target = e.target;
       if (!pencilSettings.contains(target) && !toolbar.contains(target)) {
         pencilSettings.style.display = 'none';
+      }
+    }
+    if (fillPopup.style.display === 'flex') {
+      var target = e.target;
+      if (!fillPopup.contains(target) && target.id !== 'shapeFillBtn' && !target.closest('#shapeFillBtn')) {
+        fillPopup.style.display = 'none';
+      }
+    }
+    if (strokePopup.style.display === 'flex') {
+      var target = e.target;
+      if (!strokePopup.contains(target) && target.id !== 'shapeStrokeBtn' && !target.closest('#shapeStrokeBtn')) {
+        strokePopup.style.display = 'none';
       }
     }
   });
@@ -710,6 +1032,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.key === 'Escape') {
       if (pencilSettings.style.display !== 'none') {
         pencilSettings.style.display = 'none';
+      } else if (fillPopup.style.display === 'flex') {
+        fillPopup.style.display = 'none';
+      } else if (strokePopup.style.display === 'flex') {
+        strokePopup.style.display = 'none';
       } else {
         onCancel();
       }

@@ -60,6 +60,120 @@ canvas#displayCanvas {
   letter-spacing: 0.5px;
 }
 
+/* ── Shared popup / sub-toolbar base ── */
+.subtoolbar, .settings-popup {
+  display: none;
+  position: fixed;
+  z-index: 15;
+  background: rgba(42, 42, 42, 0.94);
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Shape sub-toolbar ── */
+#shapeToolbar {
+  flex-direction: row;
+}
+#shapeToolbar .st-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px; height: 30px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #ccc;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+#shapeToolbar .st-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+#shapeToolbar .st-btn.active { background: rgba(255,215,0,0.2); color: #FFD700; }
+
+/* ── Fill/Stroke popups ── */
+.settings-popup {
+  flex-direction: column;
+  gap: 6px;
+  z-index: 25;
+}
+.settings-popup .popup-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.settings-popup .popup-label {
+  font-size: 10px;
+  color: #888;
+  min-width: 28px;
+}
+.settings-popup .none-btn {
+  font-size: 11px;
+  color: #999;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.settings-popup .none-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.settings-popup .none-btn.active { border-color: #FFD700; color: #FFD700; }
+.settings-popup .swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.settings-popup .swatch:hover { transform: scale(1.15); }
+.settings-popup .swatch.active { border-color: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.3); }
+.settings-popup .opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.settings-popup .opacity-row input[type="range"] {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.settings-popup .opacity-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #FFD700;
+  border: none;
+  cursor: pointer;
+}
+.settings-popup .opacity-val {
+  font-size: 11px;
+  color: #ccc;
+  min-width: 32px;
+  text-align: center;
+}
+.fill-preview, .stroke-preview {
+  width: 16px; height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.2);
+  display: inline-block;
+  vertical-align: middle;
+}
+
 /* ── Pencil settings popup ── */
 #pencilSettings {
   display: none;
@@ -147,6 +261,62 @@ canvas#displayCanvas {
     <div class="width-sample" data-width="12"><div class="line" style="height:8px"></div></div>
   </div>
 </div>
+
+<!-- ── Shape sub-toolbar ── -->
+<div id="shapeToolbar" class="subtoolbar">
+  <button class="st-btn active" data-shape="rect" title="Rectangle">▬</button>
+  <button class="st-btn" data-shape="ellipse" title="Ellipse">⬭</button>
+  <button class="st-btn" data-shape="line" title="Line">╱</button>
+  <button class="st-btn" data-shape="arrow" title="Arrow">→</button>
+  <span class="toolbar-sep"></span>
+  <button class="st-btn" id="shapeFillBtn" title="Fill">
+    <span class="fill-preview" id="fillPreview" style="background:transparent"></span>
+  </button>
+  <button class="st-btn" id="shapeStrokeBtn" title="Stroke">
+    <span class="stroke-preview" id="strokePreview" style="background:#FF6B6B"></span>
+  </button>
+</div>
+
+<!-- ── Fill popup ── -->
+<div id="fillPopup" class="settings-popup">
+  <div class="popup-row">
+    <span class="popup-label">FILL</span>
+    <button class="none-btn active" id="fillNone">None</button>
+  </div>
+  <div class="popup-row">
+    <div class="swatch" data-fill="#FFD700" style="background:#FFD700"></div>
+    <div class="swatch" data-fill="#FF6B6B" style="background:#FF6B6B"></div>
+    <div class="swatch" data-fill="#4A9EFF" style="background:#4A9EFF"></div>
+    <div class="swatch" data-fill="#4ADE80" style="background:#4ADE80"></div>
+    <div class="swatch" data-fill="#FFFFFF" style="background:#FFFFFF"></div>
+  </div>
+  <div class="opacity-row">
+    <span class="popup-label">OP</span>
+    <input type="range" id="fillOpacity" min="0" max="100" value="50">
+    <span class="opacity-val" id="fillOpacityVal">50%</span>
+  </div>
+</div>
+
+<!-- ── Stroke popup ── -->
+<div id="strokePopup" class="settings-popup">
+  <div class="popup-row">
+    <span class="popup-label">STRK</span>
+    <button class="none-btn" id="strokeNone">None</button>
+  </div>
+  <div class="popup-row">
+    <div class="swatch active" data-stroke="#FF6B6B" style="background:#FF6B6B"></div>
+    <div class="swatch" data-stroke="#FFD700" style="background:#FFD700"></div>
+    <div class="swatch" data-stroke="#4A9EFF" style="background:#4A9EFF"></div>
+    <div class="swatch" data-stroke="#4ADE80" style="background:#4ADE80"></div>
+    <div class="swatch" data-stroke="#FFFFFF" style="background:#FFFFFF"></div>
+  </div>
+  <div class="opacity-row">
+    <span class="popup-label">OP</span>
+    <input type="range" id="strokeOpacity" min="0" max="100" value="100">
+    <span class="opacity-val" id="strokeOpacityVal">100%</span>
+  </div>
+</div>
+
 <script src="capture.js"></script>
 </body>
 </html>
