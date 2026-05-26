@@ -167,11 +167,12 @@ function render() {
     ctx.strokeRect(hr.x, hr.y, hr.w, hr.h);
   }
 
-  // 6. Dimension label
+  // 6. Dimension label (show physical pixel dimensions, matching what the AI receives)
   ctx.fillStyle = 'rgba(255, 215, 0, 0.9)';
   ctx.font = '13px -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  var dimText = sel.w + ' × ' + sel.h;
+  var dpr = window.devicePixelRatio || 1;
+  var dimText = Math.round(sel.w * dpr) + ' × ' + Math.round(sel.h * dpr);
   var labelX = sel.x + sel.w / 2;
   var labelY = sel.y - 8;
   if (labelY < 16) labelY = sel.y + sel.h + 18;
