@@ -65,10 +65,13 @@ canvas#displayCanvas {
 <canvas id="displayCanvas"></canvas>
 <div id="toolbar">
   <span class="tool-label">TOOLS</span>
-  <button class="toolbar-btn active" data-tool="select" title="Select / Move">↖</button>
+  <button class="toolbar-btn" data-tool="move" title="Move selection">⤡</button>
   <button class="toolbar-btn" data-tool="pencil" title="Pencil">✎</button>
-  <button class="toolbar-btn" data-tool="shape" title="Rectangle">□</button>
-  <button class="toolbar-btn" data-tool="eraser" title="Eraser">⌫</button>
+  <button class="toolbar-btn active" data-tool="shape" title="Rectangle">□</button>
+  <button class="toolbar-btn" data-tool="eraser" title="Eraser">◎</button>
+  <span class="toolbar-sep"></span>
+  <button class="toolbar-btn" data-tool="undo" title="Undo">↩</button>
+  <button class="toolbar-btn" data-tool="redo" title="Redo">↪</button>
   <span class="toolbar-sep"></span>
   <button class="toolbar-btn confirm" id="confirmBtn" title="Confirm">✓</button>
   <button class="toolbar-btn cancel" id="cancelBtn" title="Cancel">✕</button>

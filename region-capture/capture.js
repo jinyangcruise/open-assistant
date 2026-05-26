@@ -48,11 +48,12 @@ var state = {
   moveStartMouse: null,
   moveStartSel: null,
 
-  // Tool: 'select' | 'pencil' | 'shape' | 'eraser'
-  currentTool: 'select',
+  // Tool: 'move' | 'pencil' | 'shape' | 'eraser'
+  currentTool: 'shape',
 
   // Annotations
   annotations: [], // array of stroke objects
+  redoStack: [], // undone annotations for redo
   currentStroke: null, // stroke being drawn
   shapeStart: null, // mouse-down point for shape tool
 };
@@ -408,34 +409,37 @@ function onMouseDown(e) {
   var pos = getMousePos(e);
   var mx = pos.x, my = pos.y;
 
-  if (state.currentTool === 'select') {
-    // Check handle hit
-    if (state.sel) {
-      var hit = hitTestHandle(mx, my, state.sel);
-      if (hit) {
-        state.activeHandle = hit;
-        state.dragStartSel = { x: state.sel.x, y: state.sel.y, w: state.sel.w, h: state.sel.h };
-        state.dragStartMouse = { x: mx, y: my };
-        return;
-      }
-      // Check inside selection → move
-      if (mx >= state.sel.x && mx <= state.sel.x + state.sel.w &&
-          my >= state.sel.y && my <= state.sel.y + state.sel.h) {
-        state.isMoving = true;
-        state.moveStartMouse = { x: mx, y: my };
-        state.moveStartSel = { x: state.sel.x, y: state.sel.y, w: state.sel.w, h: state.sel.h };
-        return;
-      }
+  // 1. Always check handle hit first (any tool can resize)
+  if (state.sel) {
+    var hit = hitTestHandle(mx, my, state.sel);
+    if (hit) {
+      state.activeHandle = hit;
+      state.dragStartSel = { x: state.sel.x, y: state.sel.y, w: state.sel.w, h: state.sel.h };
+      state.dragStartMouse = { x: mx, y: my };
+      return;
     }
-    // Start new selection
+  }
+
+  // 2. No selection yet → always create one (regardless of tool)
+  if (!state.sel) {
     state.isSelecting = true;
     state.selectStart = { x: mx, y: my };
-    state.sel = null;
     return;
   }
 
-  // Annotation tools — only draw inside selection
+  // 3. Selection exists → handle based on current tool
+  if (state.currentTool === 'move') {
+    if (mx >= state.sel.x && mx <= state.sel.x + state.sel.w &&
+        my >= state.sel.y && my <= state.sel.y + state.sel.h) {
+      state.isMoving = true;
+      state.moveStartMouse = { x: mx, y: my };
+      state.moveStartSel = { x: state.sel.x, y: state.sel.y, w: state.sel.w, h: state.sel.h };
+    }
+    return;
+  }
+
   if (state.currentTool === 'pencil' && state.sel) {
+    state.redoStack = [];
     state.currentStroke = { type: 'pencil', color: '#FFD700', width: 3, points: [{ x: mx, y: my }] };
     state.annotations.push(state.currentStroke);
     render();
@@ -443,8 +447,8 @@ function onMouseDown(e) {
   }
 
   if (state.currentTool === 'shape' && state.sel) {
+    state.redoStack = [];
     state.shapeStart = { x: mx, y: my };
-    // Create a temporary rect stroke
     state.currentStroke = { type: 'rect', color: '#FF6B6B', width: 2, start: { x: mx, y: my }, end: { x: mx, y: my } };
     state.annotations.push(state.currentStroke);
     render();
@@ -518,19 +522,19 @@ function onMouseMove(e) {
     return;
   }
 
-  // Update cursor for handle hover
-  if (state.sel && state.currentTool === 'select') {
+  // Update cursor (handle cursors work regardless of tool)
+  if (state.sel) {
     var hit = hitTestHandle(mx, my, state.sel);
     if (hit) {
       canvas.style.cursor = getHandleCursor(hit);
     } else if (mx >= state.sel.x && mx <= state.sel.x + state.sel.w &&
                my >= state.sel.y && my <= state.sel.y + state.sel.h) {
-      canvas.style.cursor = 'move';
+      canvas.style.cursor = state.currentTool === 'move' ? 'move' : 'crosshair';
     } else {
       canvas.style.cursor = 'crosshair';
     }
   } else {
-    canvas.style.cursor = state.currentTool === 'select' ? 'crosshair' : 'crosshair';
+    canvas.style.cursor = 'crosshair';
   }
 }
 
@@ -580,6 +584,30 @@ function selectTool(tool) {
   });
 }
 
+// ─── Undo ──────────────────────────────────────────────────────────────────
+
+function undoLastAnnotation() {
+  if (state.annotations.length === 0) return;
+  for (var i = state.annotations.length - 1; i >= 0; i--) {
+    var a = state.annotations[i];
+    if (a.type === 'pencil' || a.type === 'rect') {
+      state.annotations.splice(i, 1);
+      state.redoStack.push(a);
+      break;
+    }
+  }
+  render();
+}
+
+// ─── Redo ───────────────────────────────────────────────────────────────────
+
+function redoAnnotation() {
+  if (state.redoStack.length === 0) return;
+  var a = state.redoStack.pop();
+  state.annotations.push(a);
+  render();
+}
+
 // ─── Cancel ────────────────────────────────────────────────────────────────
 
 function onCancel() {
@@ -617,7 +645,14 @@ document.addEventListener('DOMContentLoaded', function() {
   // Toolbar buttons
   toolbar.querySelectorAll('.toolbar-btn[data-tool]').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      selectTool(this.getAttribute('data-tool'));
+      var tool = this.getAttribute('data-tool');
+      if (tool === 'undo') {
+        undoLastAnnotation();
+      } else if (tool === 'redo') {
+        redoAnnotation();
+      } else {
+        selectTool(tool);
+      }
     });
   });
 
