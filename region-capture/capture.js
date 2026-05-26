@@ -78,7 +78,7 @@ var state = {
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────
 
-var canvas, ctx, toolbar, pencilSettings, shapeToolbar, fillPopup, strokePopup, textOverlay, textArea;
+var canvas, ctx, toolbar, pencilSettings, shapeToolbar, fillPopup, strokePopup, textOverlay, textArea, textColorSettings;
 
 // ─── Handle rect helper ────────────────────────────────────────────────────
 
@@ -997,6 +997,8 @@ document.addEventListener('DOMContentLoaded', function() {
   pencilSettings = document.getElementById('pencilSettings');
   textOverlay = document.getElementById('textInputOverlay');
   textArea = document.getElementById('textInputArea');
+  textColorSettings = document.getElementById('textColorSettings');
+  if (textColorSettings) textColorSettings.style.display = 'none';
 
   // Initial pencil button color indicator
   var pencilBtn = toolbar.querySelector('[data-tool="pencil"]');
@@ -1043,8 +1045,12 @@ document.addEventListener('DOMContentLoaded', function() {
       } else if (tool === 'pencil' && state.currentTool === 'pencil') {
         // Already in pencil mode → toggle settings panel
         togglePencilSettings();
+      } else if (tool === 'text' && state.currentTool === 'text') {
+        // Already in text mode → toggle color settings
+        toggleTextColorSettings();
       } else {
         pencilSettings.style.display = 'none';
+        textColorSettings.style.display = 'none';
         selectTool(tool);
       }
     });
@@ -1068,6 +1074,17 @@ document.addEventListener('DOMContentLoaded', function() {
       pencilSettings.querySelectorAll('.width-sample').forEach(function(s) { s.classList.remove('active'); });
       this.classList.add('active');
       state.pencilWidth = parseInt(this.getAttribute('data-width'));
+    });
+  });
+
+  // ── Text color settings ──
+  textColorSettings.querySelectorAll('.swatch').forEach(function(el) {
+    el.addEventListener('click', function() {
+      textColorSettings.querySelectorAll('.swatch').forEach(function(s) { s.classList.remove('active'); });
+      this.classList.add('active');
+      state.textColor = this.getAttribute('data-tcolor');
+      // Update the textarea text color to match
+      textArea.style.color = state.textColor;
     });
   });
 
@@ -1190,6 +1207,12 @@ document.addEventListener('DOMContentLoaded', function() {
         pencilSettings.style.display = 'none';
       }
     }
+    if (textColorSettings.style.display === 'flex') {
+      var target = e.target;
+      if (!textColorSettings.contains(target) && !toolbar.contains(target)) {
+        textColorSettings.style.display = 'none';
+      }
+    }
     if (fillPopup.style.display === 'flex') {
       var target = e.target;
       if (!fillPopup.contains(target) && target.id !== 'shapeFillBtn' && !target.closest('#shapeFillBtn')) {
@@ -1235,6 +1258,8 @@ document.addEventListener('DOMContentLoaded', function() {
         textOverlay.style.display = 'none';
       } else if (pencilSettings.style.display !== 'none') {
         pencilSettings.style.display = 'none';
+      } else if (textColorSettings.style.display === 'flex') {
+        textColorSettings.style.display = 'none';
       } else if (fillPopup.style.display === 'flex') {
         fillPopup.style.display = 'none';
       } else if (strokePopup.style.display === 'flex') {
@@ -1282,4 +1307,18 @@ function showPencilSettings() {
 
   pencilSettings.style.left = px + 'px';
   pencilSettings.style.top = py + 'px';
+}
+
+// ─── Text color settings toggle ────────────────────────────────────────────
+
+function toggleTextColorSettings() {
+  if (textColorSettings.style.display === 'flex') {
+    textColorSettings.style.display = 'none';
+  } else {
+    // Position near the text (T) button in the toolbar
+    var tbRect = toolbar.getBoundingClientRect();
+    var txtBtn = toolbar.querySelector('[data-tool="text"]');
+    var btnRect = txtBtn ? txtBtn.getBoundingClientRect() : tbRect;
+    positionPopup(textColorSettings, txtBtn || toolbar);
+  }
 }
