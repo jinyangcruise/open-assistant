@@ -292,9 +292,18 @@ function updateToolbar() {
   // Try placing below, then above, then inside near bottom
   var ty;
   var spaceBelow = sh - (sel.y + sel.h);
-  if (spaceBelow >= tbH + TOOLBAR_GAP) {
+  var spaceAbove = sel.y;
+  var shapeTbH = (shapeToolbar && state.currentTool === 'shape') ? (shapeToolbar.offsetHeight || 36) : 0;
+  var bothH = tbH + (shapeTbH > 0 ? shapeTbH + 4 : 0);
+
+  // Priority: both below > both above > main only below > main only above
+  if (bothH > 0 && spaceBelow >= bothH + TOOLBAR_GAP) {
     ty = sel.y + sel.h + TOOLBAR_GAP;
-  } else if (sel.y >= tbH + TOOLBAR_GAP) {
+  } else if (bothH > 0 && spaceAbove >= bothH + TOOLBAR_GAP) {
+    ty = sel.y - bothH - TOOLBAR_GAP;
+  } else if (spaceBelow >= tbH + TOOLBAR_GAP) {
+    ty = sel.y + sel.h + TOOLBAR_GAP;
+  } else if (spaceAbove >= tbH + TOOLBAR_GAP) {
     ty = sel.y - tbH - TOOLBAR_GAP;
   } else {
     // Inside selection, near bottom
@@ -782,15 +791,33 @@ function positionShapeToolbar() {
   var cx = sel.x + sel.w / 2;
   var tx = Math.max(4, Math.min(sw - tbW - 4, cx - tbW / 2));
 
-  // Try placing BELOW the main toolbar first, then above
+  // Position on the SAME side as the main toolbar (stacked), so neither
+  // toolbar overlaps the selection. If main toolbar is above the selection,
+  // shape toolbar goes above it; if below, shape goes below it.
   var mainTbRect = toolbar.getBoundingClientRect();
-  var ty = mainTbRect.bottom + 4;
-  if (ty + tbH > sh - 4) {
+  var mainTbMid = (mainTbRect.top + mainTbRect.bottom) / 2;
+  var selMid = sel.y + sel.h / 2;
+  var ty;
+
+  if (mainTbMid < selMid) {
+    // Main toolbar is above selection → stack shape above main toolbar
     ty = mainTbRect.top - tbH - 4;
+    if (ty < 4) {
+      // Not enough space above → try below main toolbar instead
+      ty = mainTbRect.bottom + 4;
+    }
+  } else {
+    // Main toolbar is below selection → stack shape below main toolbar
+    ty = mainTbRect.bottom + 4;
+    if (ty + tbH > sh - 4) {
+      // Not enough space below → try above main toolbar instead
+      ty = mainTbRect.top - tbH - 4;
+    }
   }
-  if (ty < 4) {
-    ty = Math.max(4, sel.y - tbH - 4);
-  }
+
+  // Final safety clamp
+  if (ty < 4) ty = Math.max(4, sel.y - tbH - 4);
+  if (ty + tbH > sh - 4) ty = Math.min(sh - tbH - 4, sel.y + sel.h + TOOLBAR_GAP);
 
   shapeToolbar.style.left = tx + 'px';
   shapeToolbar.style.top = ty + 'px';
