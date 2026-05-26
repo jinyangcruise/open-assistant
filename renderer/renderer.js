@@ -994,7 +994,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
     var promptEnabled = ps.enabled !== false; // default true for backward compat
 
     var card = document.createElement('div');
-    card.className = 'prompt-card' + (anyEnabled ? ' active' : '');
+    card.className = 'prompt-card' + (promptEnabled ? ' active' : '');
     card.setAttribute('title', fullContent);
 
     card.innerHTML =
