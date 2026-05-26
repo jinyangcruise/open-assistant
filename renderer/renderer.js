@@ -991,6 +991,8 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
         '</div>';
     }
 
+    var promptEnabled = ps.enabled !== false; // default true for backward compat
+
     var card = document.createElement('div');
     card.className = 'prompt-card' + (anyEnabled ? ' active' : '');
     card.setAttribute('title', fullContent);
@@ -998,8 +1000,8 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
     card.innerHTML =
       '<div class="prompt-card-name" title="' + escapeHtml(fullContent) + '">' + escapeHtml(promptName) + '</div>' +
       '<div class="prompt-card-modes">' + modesHtml + '</div>' +
-      '<button class="capsule-btn' + (anyEnabled ? ' active' : '') + '" data-agent="' + agent.id + '" data-prompt="' + promptId + '" title="' + (anyEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
-            (anyEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
+      '<button class="capsule-btn' + '" data-agent="' + agent.id + '" data-prompt="' + promptId + '" title="' + (promptEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
+            (promptEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
       '</button>';
 
     // --- Event handlers ---
@@ -1039,23 +1041,23 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
       });
     });
 
-    // Enable/In-use button at bottom
+    // Enable/In-use button at bottom (master switch for the whole prompt)
     var toggleBtn = card.querySelector('.capsule-btn');
-    toggleBtn.addEventListener('click', async function(e) {
-      e.stopPropagation();
-      // Toggle all modes: if any enabled, disable all; if none enabled, enable all
-      var currentlyEnabled = anyEnabled;
-      var newVal = !currentlyEnabled;
-      for (var m2 = 0; m2 < MODES.length; m2++) {
-        await window.electronAPI.updateAgentConfig(agent.id, { ['promptShortcuts.' + promptId + '.modes.' + MODES[m2] + '.enabled']: newVal });
-      }
-      await loadAgents();
-    });
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        var newVal = !promptEnabled;
+        try {
+          await window.electronAPI.updateAgentConfig(agent.id, { ['promptShortcuts.' + promptId + '.enabled']: newVal });
+          await loadAgents();
+        } catch (err) {
+          console.error('[Card] Toggle failed:', err);
+        }
+      });
+    }
 
     return card;
   }
-
-  // System Default prompt (always first)
   listEl.appendChild(createCard('system-default', t('prompt.systemDefault'), defaultPromptText));
 
   // User-defined prompts

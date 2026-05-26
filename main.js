@@ -480,6 +480,10 @@ function registerAllShortcuts() {
     for (const [promptId, config] of Object.entries(promptShortcuts)) {
       // New format: modes within each prompt
       var modes = config.modes;
+      // Check prompt-level master switch (default enabled for backward compat)
+      var promptEnabled = config.enabled !== false;
+      if (!promptEnabled) continue;
+
       if (modes) {
         for (const [modeId, modeConfig] of Object.entries(modes)) {
           var shortcut = (modeConfig.shortcut || '').trim();
