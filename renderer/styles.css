@@ -941,7 +941,7 @@ section {
   border: none;
   border-top: 1px solid var(--border-color);
   background: transparent;
-  color: var(--primary-color);
+  color: #9ca3af;
   font-size: 0.72rem;
   font-weight: 600;
   font-family: inherit;
@@ -957,7 +957,7 @@ section {
 }
 
 .capsule-btn.inactive {
-  color: #d1d5db;
+  color: var(--primary-color);
 }
 
 .capsule-btn.inactive:hover {

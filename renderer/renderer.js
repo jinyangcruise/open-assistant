@@ -999,7 +999,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
     card.innerHTML =
       '<div class="prompt-card-name" title="' + escapeHtml(fullContent) + '">' + escapeHtml(promptName) + '</div>' +
       '<div class="prompt-card-modes">' + modesHtml + '</div>' +
-      '<button class="capsule-btn' + '" data-agent="' + agent.id + '" data-prompt="' + promptId + '" title="' + (promptEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
+      '<button class="capsule-btn' + (promptEnabled ? '' : ' inactive') + '" data-agent="' + agent.id + '" data-prompt="' + promptId + '" title="' + (promptEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
             (promptEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
       '</button>';
 
