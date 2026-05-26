@@ -55,6 +55,13 @@ var state = {
   pencilColor: '#FFD700',
   pencilWidth: 3,
 
+  // Text
+  textColor: '#FFD700',
+  textFontSize: 16,
+  isDraggingText: false,
+  dragTextIndex: -1,
+  dragTextOffset: { x: 0, y: 0 },
+
   // Shape settings
   shapeType: 'rect', // 'rect' | 'ellipse' | 'line' | 'arrow'
   shapeFillColor: null, // null = no fill
@@ -71,7 +78,7 @@ var state = {
 
 // ─── DOM refs ──────────────────────────────────────────────────────────────
 
-var canvas, ctx, toolbar, pencilSettings, shapeToolbar, fillPopup, strokePopup;
+var canvas, ctx, toolbar, pencilSettings, shapeToolbar, fillPopup, strokePopup, textOverlay, textArea;
 
 // ─── Handle rect helper ────────────────────────────────────────────────────
 
@@ -202,12 +209,15 @@ function renderAnnotations(context) {
     }
 
     // Shape types: rect, ellipse, line, arrow
-    var sx = Math.min(s.start.x, s.end.x);
-    var sy = Math.min(s.start.y, s.end.y);
-    var sw = Math.abs(s.end.x - s.start.x);
-    var sh = Math.abs(s.end.y - s.start.y);
-    var cx = (s.start.x + s.end.x) / 2;
-    var cy = (s.start.y + s.end.y) / 2;
+    var sx, sy, sw, sh, cx, cy;
+    if (s.type !== 'text') {
+      sx = Math.min(s.start.x, s.end.x);
+      sy = Math.min(s.start.y, s.end.y);
+      sw = Math.abs(s.end.x - s.start.x);
+      sh = Math.abs(s.end.y - s.start.y);
+      cx = (s.start.x + s.end.x) / 2;
+      cy = (s.start.y + s.end.y) / 2;
+    }
 
     // Fill (for rect and ellipse)
     if (s.fillColor && (s.type === 'rect' || s.type === 'ellipse')) {
@@ -260,6 +270,16 @@ function renderAnnotations(context) {
           s.end.y - headLen * Math.sin(angle + headAngle)
         );
         context.stroke();
+      }
+    } else if (s.type === 'text') {
+      context.textBaseline = 'top';
+      context.textAlign = 'start';
+      context.fillStyle = s.color || '#FFD700';
+      context.font = (s.fontSize || 16) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      var lines = s.text.split('\n');
+      var lineH = (s.fontSize || 16) * 1.3;
+      for (var li = 0; li < lines.length; li++) {
+        context.fillText(lines[li], s.x, s.y + li * lineH);
       }
     }
 
@@ -416,6 +436,64 @@ function eraseAtPoint(mx, my) {
   state.annotations = keep;
 }
 
+// ─── Text hit test ──────────────────────────────────────────────────────────
+
+function hitTestText(mx, my) {
+  for (var i = state.annotations.length - 1; i >= 0; i--) {
+    var s = state.annotations[i];
+    if (s.type !== 'text') continue;
+    var lines = s.text.split('\n');
+    var lineH = (s.fontSize || 16) * 1.3;
+    var maxW = 0;
+    for (var li = 0; li < lines.length; li++) {
+      var w = lines[li].length * (s.fontSize || 16) * 0.6; // rough width estimate
+      if (w > maxW) maxW = w;
+    }
+    var h = lines.length * lineH;
+    if (mx >= s.x && mx <= s.x + maxW && my >= s.y && my <= s.y + h) {
+      return { index: i, annot: s };
+    }
+  }
+  return null;
+}
+
+// ─── Show / commit text input ──────────────────────────────────────────────
+
+var textPlacePos = { x: 0, y: 0 };
+
+function showTextInput(x, y) {
+  textPlacePos.x = x;
+  textPlacePos.y = y;
+  textOverlay.style.display = 'block';
+  textOverlay.style.left = x + 'px';
+  textOverlay.style.top = y + 'px';
+  textArea.value = '';
+  textArea.style.width = '120px';
+  textArea.style.height = '28px';
+  // Defer focus so the mousedown event fully completes first
+  setTimeout(function() { textArea.focus(); }, 0);
+}
+
+function commitTextInput() {
+  var text = textArea.value.trim();
+  textOverlay.style.display = 'none';
+  if (!text) return;
+  state.redoStack = [];
+  state.annotations.push({
+    type: 'text',
+    text: text,
+    x: textPlacePos.x,
+    y: textPlacePos.y + 5,
+    color: '#FFD700',
+    fontSize: 16,
+  });
+  render();
+}
+
+function cancelTextInput() {
+  textOverlay.style.display = 'none';
+}
+
 // ─── Final composite (on Confirm) ──────────────────────────────────────────
 
 function buildFinalImage() {
@@ -458,14 +536,16 @@ function buildFinalImage() {
     }
 
     // Shape types
-    var sx = Math.min(s.start.x, s.end.x) - sel.x;
-    var sy = Math.min(s.start.y, s.end.y) - sel.y;
-    var sw = Math.abs(s.end.x - s.start.x);
-    var sh = Math.abs(s.end.y - s.start.y);
-    var cx = (s.start.x + s.end.x) / 2 - sel.x;
-    var cy = (s.start.y + s.end.y) / 2 - sel.y;
-
-    var strokeAlpha = s.strokeOpacity !== undefined ? s.strokeOpacity : 1;
+    var sx, sy, sw, sh, cx, cy, strokeAlpha;
+    strokeAlpha = s.strokeOpacity !== undefined ? s.strokeOpacity : 1;
+    if (s.type !== 'text') {
+      sx = Math.min(s.start.x, s.end.x) - sel.x;
+      sy = Math.min(s.start.y, s.end.y) - sel.y;
+      sw = Math.abs(s.end.x - s.start.x);
+      sh = Math.abs(s.end.y - s.start.y);
+      cx = (s.start.x + s.end.x) / 2 - sel.x;
+      cy = (s.start.y + s.end.y) / 2 - sel.y;
+    }
 
     // Fill
     if (s.fillColor && (s.type === 'rect' || s.type === 'ellipse')) {
@@ -509,6 +589,16 @@ function buildFinalImage() {
         fctx.moveTo(lx2, ly2);
         fctx.lineTo(lx2 - headLen * Math.cos(angle + headAngle), ly2 - headLen * Math.sin(angle + headAngle));
         fctx.stroke();
+      }
+    } else if (s.type === 'text') {
+      fctx.textBaseline = 'top';
+      fctx.textAlign = 'start';
+      fctx.fillStyle = s.color || '#FFD700';
+      fctx.font = (s.fontSize || 16) + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      var lines = s.text.split('\n');
+      var lineH = (s.fontSize || 16) * 1.3;
+      for (var li = 0; li < lines.length; li++) {
+        fctx.fillText(lines[li], s.x - sel.x, s.y - sel.y + li * lineH);
       }
     }
 
@@ -554,6 +644,15 @@ function getMousePos(e) {
 
 function onMouseDown(e) {
   if (e.button !== 0) return; // left button only
+
+  // If text input is active, clicking outside commits it, clicking inside is ignored
+  if (textOverlay.style.display !== 'none') {
+    if (!textOverlay.contains(e.target)) {
+      commitTextInput();
+    }
+    return;
+  }
+
   var pos = getMousePos(e);
   var mx = pos.x, my = pos.y;
 
@@ -616,6 +715,24 @@ function onMouseDown(e) {
     render();
     return;
   }
+
+  if (state.currentTool === 'text' && state.sel) {
+    // Check if clicking on existing text → drag it
+    var hitTxt = hitTestText(mx, my);
+    if (hitTxt) {
+      state.isDraggingText = true;
+      state.dragTextIndex = hitTxt.index;
+      state.dragTextOffset = { x: mx - hitTxt.annot.x, y: my - hitTxt.annot.y };
+      return;
+    }
+    // Otherwise place new text
+    if (mx >= state.sel.x && mx <= state.sel.x + state.sel.w &&
+        my >= state.sel.y && my <= state.sel.y + state.sel.h) {
+      e.preventDefault();
+      showTextInput(mx, my);
+    }
+    return;
+  }
 }
 
 function onMouseMove(e) {
@@ -668,6 +785,17 @@ function onMouseMove(e) {
   if (state.currentStroke && state.shapeStart && state.currentStroke.end) {
     state.currentStroke.end = { x: mx, y: my };
     render();
+    return;
+  }
+
+  // Text dragging
+  if (state.isDraggingText && state.dragTextIndex >= 0) {
+    var ta = state.annotations[state.dragTextIndex];
+    if (ta && ta.type === 'text') {
+      ta.x = mx - state.dragTextOffset.x;
+      ta.y = my - state.dragTextOffset.y;
+      render();
+    }
     return;
   }
 
@@ -729,6 +857,12 @@ function onMouseUp(e) {
     render();
     return;
   }
+
+  if (state.isDraggingText) {
+    state.isDraggingText = false;
+    state.dragTextIndex = -1;
+    return;
+  }
 }
 
 // ─── Tool selection ────────────────────────────────────────────────────────
@@ -756,7 +890,7 @@ function undoLastAnnotation() {
   if (state.annotations.length === 0) return;
   for (var i = state.annotations.length - 1; i >= 0; i--) {
     var a = state.annotations[i];
-    if (a.type === 'pencil' || a.type === 'rect') {
+    if (a.type === 'pencil' || a.type === 'rect' || a.type === 'ellipse' || a.type === 'line' || a.type === 'arrow' || a.type === 'text') {
       state.annotations.splice(i, 1);
       state.redoStack.push(a);
       break;
@@ -861,6 +995,8 @@ document.addEventListener('DOMContentLoaded', function() {
   ctx = canvas.getContext('2d');
   toolbar = document.getElementById('toolbar');
   pencilSettings = document.getElementById('pencilSettings');
+  textOverlay = document.getElementById('textInputOverlay');
+  textArea = document.getElementById('textInputArea');
 
   // Listen for capture start from main process
   window.regionCaptureAPI.onCaptureStart(function(data) {
@@ -1064,6 +1200,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // Text input: commit on Enter (without Shift), cancel on Escape
+  textArea.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      commitTextInput();
+    } else if (e.key === 'Escape') {
+      cancelTextInput();
+    }
+  });
+
   document.getElementById('confirmBtn').addEventListener('click', function() {
     var dataUrl = buildFinalImage();
     if (dataUrl) {
@@ -1076,7 +1222,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Escape key
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-      if (pencilSettings.style.display !== 'none') {
+      if (textOverlay.style.display !== 'none') {
+        textOverlay.style.display = 'none';
+      } else if (pencilSettings.style.display !== 'none') {
         pencilSettings.style.display = 'none';
       } else if (fillPopup.style.display === 'flex') {
         fillPopup.style.display = 'none';

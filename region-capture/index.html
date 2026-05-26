@@ -195,6 +195,31 @@ canvas#displayCanvas {
   vertical-align: middle;
 }
 
+/* ── Text input overlay ── */
+#textInputOverlay {
+  display: none;
+  position: fixed;
+  z-index: 30;
+  background: transparent;
+}
+#textInputOverlay textarea {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #FFD700;
+  background: rgba(0,0,0,0.5);
+  border: 1px dashed #FFD700;
+  border-radius: 3px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  min-width: 30px;
+  min-height: 24px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
 /* ── Pencil settings popup ── */
 #pencilSettings {
   display: none;
@@ -258,6 +283,7 @@ canvas#displayCanvas {
   <button class="toolbar-btn" data-tool="pencil" title="Pencil">✎</button>
   <button class="toolbar-btn active" data-tool="shape" title="Rectangle">□</button>
   <button class="toolbar-btn" data-tool="eraser" title="Eraser">◎</button>
+  <button class="toolbar-btn" data-tool="text" title="Text">T</button>
   <span class="toolbar-sep"></span>
   <button class="toolbar-btn" data-tool="undo" title="Undo">↩</button>
   <button class="toolbar-btn" data-tool="redo" title="Redo">↪</button>
@@ -332,6 +358,11 @@ canvas#displayCanvas {
     <input type="range" id="strokeOpacity" min="0" max="100" value="100">
     <span class="opacity-val" id="strokeOpacityVal">100%</span>
   </div>
+</div>
+
+<!-- ── Text input overlay ── -->
+<div id="textInputOverlay">
+  <textarea id="textInputArea" rows="1"></textarea>
 </div>
 
 <script src="capture.js"></script>
