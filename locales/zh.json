@@ -117,7 +117,10 @@
   "mode": {
     "fullscreen": "全屏",
     "window": "窗口",
-    "region": "矩形"
+    "region": "矩形",
+    "fullscreenDesc": "截取整个屏幕发送给 AI 分析，回复将自动插入到光标位置",
+    "windowDesc": "仅截取当前活动窗口发送给 AI 分析，回复将自动插入到光标位置",
+    "regionDesc": "手动拖动选择矩形区域，可添加标注，确认后发送给 AI 分析，回复将自动插入到光标位置"
   },
 
   "faq": {

@@ -985,7 +985,7 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
         '  <label class="mode-checkbox-label">' +
         '    <input type="checkbox" class="mode-checkbox" data-agent="' + agent.id + '" data-prompt="' + promptId + '" data-mode="' + modeId + '" ' + (modeEnabled ? 'checked' : '') + '>' +
         '  </label>' +
-        '  <span class="mode-label">' + getModeLabel(modeId) + '</span>' +
+        '  <span class="mode-label" title="' + escapeHtml(getModeLabel(modeId + 'Desc')) + '">' + getModeLabel(modeId) + '</span>' +
         '  <span class="mode-shortcut-area">' + shortcutHtml + '</span>' +
               clearHtml +
         '</div>';

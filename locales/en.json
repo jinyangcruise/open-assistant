@@ -116,7 +116,10 @@
   "mode": {
     "fullscreen": "Fullscreen",
     "window": "Window",
-    "region": "Region"
+    "region": "Region",
+    "fullscreenDesc": "Capture the full screen and send to AI; reply auto-inserts at cursor",
+    "windowDesc": "Capture the active window and send to AI; reply auto-inserts at cursor",
+    "regionDesc": "Drag to select an area, add annotations, confirm to send to AI; reply auto-inserts at cursor"
   },
 
   "faq": {
