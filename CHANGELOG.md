@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.5.5 — 2026-05-26
+
+### English
+
+#### New Features
+- **Window screenshot mode**: Capture only the active window using PrintWindow API; falls back to crop for hardware-accelerated content
+- **Region screenshot mode**: Full snipping-tool-style region selector with 8 resize handles, annotation tools (pencil, shapes, text, eraser), undo/redo, fill/stroke settings, and auto-placed toolbar
+- **Annotation text tool**: Click to place text on screenshots, auto-expanding input, draggable after placement, configurable color
+- **Shape drawing tools**: Rectangle, ellipse, line, arrow with fill color, stroke color, and opacity controls
+- **Prompt card tooltips**: Hover over mode labels for detailed descriptions of each capture mode
+
+#### Improvements
+- **Sharp screenshots**: Full-resolution canvas rendering preserves native display pixel quality
+- **Work area alignment**: Region overlay matches Windows work area (excludes taskbar) to avoid stretching
+- **Tool color defaults**: All annotation tools default to red for consistency
+
+#### Changes
+- Region capture files now in `region-capture/` directory
+- Version bumped to 0.5.5
+
+---
+
+### 中文
+
+#### 新增功能
+- **窗口截图模式**：使用 PrintWindow API 截取当前活动窗口，DirectX 内容自动回退到裁剪方式
+- **矩形截图模式**：完整的截图工具风格区域选择器，含 8 个调整手柄、标注工具（铅笔、形状、文字、橡皮）、撤销/重做、填充/描边设置、自动定位工具栏
+- **文字标注工具**：点击在截图上放置文字，输入框自动拓宽，确认后可拖动，支持颜色切换
+- **形状绘制工具**：矩形、椭圆、直线、箭头，支持填充颜色、描边颜色和不透明度
+- **提示词卡片 tooltip**：鼠标悬停模式标签时显示详细说明
+
+#### 改进
+- **高清截图**：全分辨率画布渲染，保持原始屏幕像素质量
+- **工作区对齐**：区域截图覆盖层匹配 Windows 工作区（排除任务栏），避免拉伸
+- **工具默认颜色**：所有标注工具默认统一为红色
+
+#### 变更
+- 区域截图的文件集中到 `region-capture/` 目录
+- 版本号更新至 0.5.5
+
+
 ## v0.5.4 — 2026-05-25
 
 ### English
