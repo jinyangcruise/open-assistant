@@ -35,6 +35,7 @@ let selectedAgentIds = [];
 // Shortcut recorder state
 let recorderAgentId = null;
 let recorderPromptId = null;
+let recorderModeId = null;
 let recorderShortcut = null;
 
 // Prompt DOM Elements
@@ -920,75 +921,147 @@ function renderAgentPromptCapsules(agent, promptShortcuts, agentItem) {
 
   listEl.innerHTML = '';
 
-  // Helper to render a capsule for a prompt
-  function createCapsule(promptId, promptName, promptContent) {
+  // Mode definitions
+  var MODES = ['fullscreen', 'window', 'region'];
+
+  function getModeLabel(modeId) {
+    return t('mode.' + modeId);
+  }
+
+  // Helper to get/create mode config for a prompt
+  function getModes(ps) {
+    // New format: ps.modes = { fullscreen: {shortcut, enabled}, ... }
+    if (ps.modes) return ps.modes;
+    // Legacy format: migrate shortcut/enabled to modes.fullscreen
+    var legacy = {};
+    legacy.fullscreen = {
+      shortcut: (ps.shortcut || '').trim(),
+      enabled: !!ps.enabled
+    };
+    legacy.window = { shortcut: '', enabled: false };
+    legacy.region = { shortcut: '', enabled: false };
+    // Save migrated data
+    if (ps.shortcut !== undefined || ps.enabled !== undefined) {
+      var agentId = agent.id;
+      var promptId = ps._promptId;
+      if (promptId) {
+        // Async save - fire and forget
+        window.electronAPI.updateAgentConfig(agentId, { ['promptShortcuts.' + promptId + '.modes']: legacy });
+      }
+    }
+    return legacy;
+  }
+
+  // Helper to render a prompt card
+  function createCard(promptId, promptName, promptContent) {
     var ps = promptShortcuts[promptId] || {};
-    var shortcut = (ps.shortcut || '').trim();
-    var enabled = !!ps.enabled;
     var fullContent = promptContent || promptName;
 
-    var capsule = document.createElement('div');
-    capsule.className = 'prompt-capsule' + (enabled ? ' active' : '');
-    capsule.setAttribute('title', fullContent);
+    // Attach promptId for legacy migration
+    ps._promptId = promptId;
 
-    var shortcutDisplay = shortcut
-      ? '<span class="capsule-shortcut-text" title="">' + escapeHtml(shortcut.replace('Control', 'Ctrl')) + '</span>'
-      : '<span class="capsule-shortcut-unset" title="">' + t('agent.shortcutUnset') + '</span>';
+    var modes = getModes(ps);
+    var anyEnabled = false;
+    var disabledModes = 0;
 
-    var clearBtnHtml = shortcut
-      ? '<button class="capsule-clear-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutClearTitle') + '">✕</button>'
-      : '';
+    // Build mode rows HTML
+    var modesHtml = '';
+    for (var m = 0; m < MODES.length; m++) {
+      var modeId = MODES[m];
+      var mc = modes[modeId] || { shortcut: '', enabled: false };
+      var modeShortcut = (mc.shortcut || '').trim();
+      var modeEnabled = !!mc.enabled;
+      if (modeEnabled) anyEnabled = true;
+      if (!modeEnabled) disabledModes++;
 
-    capsule.innerHTML =
-      '<div class="prompt-capsule-name" title="' + escapeHtml(fullContent) + '">' + escapeHtml(promptName) + '</div>' +
-      '<div class="prompt-capsule-shortcut">' +
-            shortcutDisplay +
-      '    <button class="capsule-edit-btn" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + t('agent.shortcutEditTitle') + '">✏️</button>' +
-            clearBtnHtml +
-      '</div>' +
-      '<button class="capsule-btn' + (enabled ? ' active' : '') + '" data-agent-id="' + agent.id + '" data-prompt-id="' + promptId + '" title="' + (enabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
-            (enabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
-      '</button>';
+      var shortcutHtml = modeShortcut
+        ? '<span class="capsule-shortcut-text" data-agent="' + agent.id + '" data-prompt="' + promptId + '" data-mode="' + modeId + '">' + escapeHtml(modeShortcut.replace('Control', 'Ctrl')) + '</span>'
+        : '<span class="capsule-shortcut-unset" data-agent="' + agent.id + '" data-prompt="' + promptId + '" data-mode="' + modeId + '">' + t('agent.shortcutUnset') + '</span>';
 
-    // Edit button: open shortcut recorder
-    var editBtn = capsule.querySelector('.capsule-edit-btn');
-    editBtn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      showShortcutRecorder(agent.id, promptId);
-    });
+      var clearHtml = '<button class="capsule-clear-btn" data-agent="' + agent.id + '" data-prompt="' + promptId + '" data-mode="' + modeId + '" title="' + t('agent.shortcutClearTitle') + '">✕</button>';
 
-    // Clear button: clear shortcut
-    var clearBtn = capsule.querySelector('.capsule-clear-btn');
-    if (clearBtn) {
-      clearBtn.addEventListener('click', async function(e) {
-        e.stopPropagation();
-        await window.electronAPI.savePromptShortcut(agent.id, promptId, '');
-        addLog(t('log.shortcutCleared', { agent: agent.name, prompt: promptName }), 'info');
-        await loadAgents();
-      });
+      modesHtml +=
+        '<div class="mode-row">' +
+        '  <label class="mode-checkbox-label">' +
+        '    <input type="checkbox" class="mode-checkbox" data-agent="' + agent.id + '" data-prompt="' + promptId + '" data-mode="' + modeId + '" ' + (modeEnabled ? 'checked' : '') + '>' +
+        '  </label>' +
+        '  <span class="mode-label">' + getModeLabel(modeId) + '</span>' +
+        '  <span class="mode-shortcut-area">' + shortcutHtml + '</span>' +
+              clearHtml +
+        '</div>';
     }
 
-    // Toggle button: enable/disable this prompt shortcut
-    var toggleBtn = capsule.querySelector('.capsule-btn');
+    var card = document.createElement('div');
+    card.className = 'prompt-card' + (anyEnabled ? ' active' : '');
+    card.setAttribute('title', fullContent);
+
+    card.innerHTML =
+      '<div class="prompt-card-name" title="' + escapeHtml(fullContent) + '">' + escapeHtml(promptName) + '</div>' +
+      '<div class="prompt-card-modes">' + modesHtml + '</div>' +
+      '<button class="capsule-btn' + (anyEnabled ? ' active' : '') + '" data-agent="' + agent.id + '" data-prompt="' + promptId + '" title="' + (anyEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) + '">' +
+            (anyEnabled ? t('agent.btnInUse') : t('agent.btnEnable')) +
+      '</button>';
+
+    // --- Event handlers ---
+
+    // Mode checkbox change
+    card.querySelectorAll('.mode-checkbox').forEach(function(cb) {
+      cb.addEventListener('change', async function(e) {
+        e.stopPropagation();
+        var agentId = cb.getAttribute('data-agent');
+        var promptId = cb.getAttribute('data-prompt');
+        var modeId = cb.getAttribute('data-mode');
+        await window.electronAPI.updateAgentConfig(agentId, { ['promptShortcuts.' + promptId + '.modes.' + modeId + '.enabled']: cb.checked });
+        await loadAgents();
+      });
+    });
+
+    // Click shortcut text or "未设置" to open recorder
+    card.querySelectorAll('.capsule-shortcut-text, .capsule-shortcut-unset').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var agentId = el.getAttribute('data-agent');
+        var promptId = el.getAttribute('data-prompt');
+        var modeId = el.getAttribute('data-mode');
+        showShortcutRecorder(agentId, promptId, modeId);
+      });
+    });
+
+    // Clear button
+    card.querySelectorAll('.capsule-clear-btn').forEach(function(btn) {
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        var agentId = btn.getAttribute('data-agent');
+        var promptId = btn.getAttribute('data-prompt');
+        var modeId = btn.getAttribute('data-mode');
+        await window.electronAPI.updateAgentConfig(agentId, { ['promptShortcuts.' + promptId + '.modes.' + modeId + '.shortcut']: '' });
+        await loadAgents();
+      });
+    });
+
+    // Enable/In-use button at bottom
+    var toggleBtn = card.querySelector('.capsule-btn');
     toggleBtn.addEventListener('click', async function(e) {
       e.stopPropagation();
-      var newEnabled = !enabled;
-      await window.electronAPI.setPromptEnabled(agent.id, promptId, newEnabled);
-      addLog(t(newEnabled ? 'log.promptEnabled' : 'log.promptDisabled', { prompt: promptName, agent: agent.name }), 'info');
-      // Reload agents to reflect changes
+      // Toggle all modes: if any enabled, disable all; if none enabled, enable all
+      var currentlyEnabled = anyEnabled;
+      var newVal = !currentlyEnabled;
+      for (var m2 = 0; m2 < MODES.length; m2++) {
+        await window.electronAPI.updateAgentConfig(agent.id, { ['promptShortcuts.' + promptId + '.modes.' + MODES[m2] + '.enabled']: newVal });
+      }
       await loadAgents();
     });
 
-    return capsule;
+    return card;
   }
 
   // System Default prompt (always first)
-  listEl.appendChild(createCapsule('system-default', t('prompt.systemDefault'), defaultPromptText));
+  listEl.appendChild(createCard('system-default', t('prompt.systemDefault'), defaultPromptText));
 
   // User-defined prompts
   for (var j = 0; j < prompts.length; j++) {
     var p = prompts[j];
-    listEl.appendChild(createCapsule(p.id, p.name, p.content));
+    listEl.appendChild(createCard(p.id, p.name, p.content));
   }
 }
 
@@ -1101,9 +1174,10 @@ function parseKeyEvent(e) {
   return parts.join('+');
 }
 
-function showShortcutRecorder(agentId, promptId) {
+function showShortcutRecorder(agentId, promptId, modeId) {
   recorderAgentId = agentId;
   recorderPromptId = promptId;
+  recorderModeId = modeId || 'fullscreen';
   recorderShortcut = null;
 
   var overlay = document.getElementById('shortcutRecorderOverlay');
@@ -1169,6 +1243,7 @@ function hideShortcutRecorder() {
   }
   recorderAgentId = null;
   recorderPromptId = null;
+  recorderModeId = null;
   recorderShortcut = null;
   document.getElementById('shortcutRecorderOverlay').style.display = 'none';
   // Resume global shortcuts that were suspended during recording
@@ -1176,7 +1251,7 @@ function hideShortcutRecorder() {
 }
 
 async function confirmShortcut() {
-  if (!recorderAgentId || !recorderPromptId || !recorderShortcut) return;
+  if (!recorderAgentId || !recorderPromptId || !recorderModeId || !recorderShortcut) return;
 
   var confirmBtn = document.getElementById('recorderConfirm');
   var status = document.getElementById('recorderStatus');
@@ -1184,10 +1259,13 @@ async function confirmShortcut() {
   status.textContent = t('shortcut.save');
   status.className = 'recorder-status';
 
-  var result = await window.electronAPI.savePromptShortcut(recorderAgentId, recorderPromptId, recorderShortcut);
+  var key = 'promptShortcuts.' + recorderPromptId + '.modes.' + recorderModeId + '.shortcut';
+  var updates = {};
+  updates[key] = recorderShortcut;
+  var result = await window.electronAPI.updateAgentConfig(recorderAgentId, updates);
 
-  if (result.success) {
-    addLog(t('log.shortcutSaved', { agent: recorderAgentId, prompt: recorderPromptId, shortcut: recorderShortcut }), 'success');
+  if (result && result.success !== false) {
+    addLog(t('log.shortcutSaved', { agent: recorderAgentId, prompt: recorderPromptId + '/' + recorderModeId, shortcut: recorderShortcut }), 'success');
     hideShortcutRecorder();
     // Reload agents to update display
     await loadAgents();

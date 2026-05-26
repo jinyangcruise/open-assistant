@@ -114,6 +114,12 @@
     "releaseNotes": "更新日志"
   },
 
+  "mode": {
+    "fullscreen": "全屏",
+    "window": "窗口",
+    "region": "矩形"
+  },
+
   "faq": {
     "title": "常见问题",
     "q1": "无法连接到豆包桌面端怎么办？",

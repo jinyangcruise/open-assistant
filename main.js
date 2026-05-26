@@ -469,7 +469,7 @@ function registerAllShortcuts() {
 
   const agents = AgentRegistry.getAll();
   const selectedIds = AgentRegistry.getSelectedIds();
-  const registeredShortcuts = new Map(); // shortcut -> { agentId, promptId }
+  const registeredShortcuts = new Map(); // shortcut -> { agentId, promptId, modeId }
   let count = 0;
 
   for (const agent of agents) {
@@ -478,25 +478,53 @@ function registerAllShortcuts() {
 
     const promptShortcuts = store.get(`agents.${agent.id}.promptShortcuts`) || {};
     for (const [promptId, config] of Object.entries(promptShortcuts)) {
-      const shortcut = (config.shortcut || '').trim();
-      if (!shortcut || !config.enabled) continue;
+      // New format: modes within each prompt
+      var modes = config.modes;
+      if (modes) {
+        for (const [modeId, modeConfig] of Object.entries(modes)) {
+          var shortcut = (modeConfig.shortcut || '').trim();
+          if (!shortcut || !modeConfig.enabled) continue;
 
-      // If this shortcut is already registered, skip (first come first served)
-      if (registeredShortcuts.has(shortcut)) {
-        console.log(`[Main] Shortcut "${shortcut}" already registered for "${registeredShortcuts.get(shortcut).agentId}/${registeredShortcuts.get(shortcut).promptId}", skipping "${agent.id}/${promptId}"`);
-        continue;
-      }
+          if (registeredShortcuts.has(shortcut)) {
+            var existing = registeredShortcuts.get(shortcut);
+            console.log(`[Main] Shortcut "${shortcut}" already registered for "${existing.agentId}/${existing.promptId}/${existing.modeId}", skipping "${agent.id}/${promptId}/${modeId}"`);
+            continue;
+          }
 
-      const registered = globalShortcut.register(shortcut, () => {
-        handleShortcut(agent.id, promptId);
-      });
+          var registered = globalShortcut.register(shortcut, function(id, pid, mid) {
+            return function() { handleShortcut(id, pid, mid); };
+          }(agent.id, promptId, modeId));
 
-      if (registered) {
-        registeredShortcuts.set(shortcut, { agentId: agent.id, promptId });
-        count++;
-        console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}/${promptId}`);
+          if (registered) {
+            registeredShortcuts.set(shortcut, { agentId: agent.id, promptId: promptId, modeId: modeId });
+            count++;
+            console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}/${promptId}/${modeId}`);
+          } else {
+            console.error(`[Main] Failed to register shortcut for ${agent.id}/${promptId}/${modeId}: ${shortcut}`);
+          }
+        }
       } else {
-        console.error(`[Main] Failed to register shortcut for ${agent.id}/${promptId}: ${shortcut}`);
+        // Legacy format: shortcut directly on the prompt
+        var shortcut = (config.shortcut || '').trim();
+        if (!shortcut || !config.enabled) continue;
+
+        if (registeredShortcuts.has(shortcut)) {
+          var existing = registeredShortcuts.get(shortcut);
+          console.log(`[Main] Shortcut "${shortcut}" already registered for "${existing.agentId}/${existing.promptId}", skipping "${agent.id}/${promptId}"`);
+          continue;
+        }
+
+        var registered = globalShortcut.register(shortcut, function(id, pid) {
+          return function() { handleShortcut(id, pid, 'fullscreen'); };
+        }(agent.id, promptId));
+
+        if (registered) {
+          registeredShortcuts.set(shortcut, { agentId: agent.id, promptId: promptId, modeId: 'fullscreen' });
+          count++;
+          console.log(`[Main] Shortcut registered: ${shortcut} -> ${agent.id}/${promptId} (legacy)`);
+        } else {
+          console.error(`[Main] Failed to register shortcut for ${agent.id}/${promptId}: ${shortcut}`);
+        }
       }
     }
   }
@@ -505,7 +533,7 @@ function registerAllShortcuts() {
 }
 
 // Main shortcut handler
-async function handleShortcut(agentId, promptId) {
+async function handleShortcut(agentId, promptId, modeId) {
   if (isProcessing) {
     showNotification('Already Processing', 'Please wait for the current request to complete');
     return;

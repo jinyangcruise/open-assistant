@@ -113,6 +113,12 @@
     "releaseNotes": "Release Notes"
   },
 
+  "mode": {
+    "fullscreen": "Fullscreen",
+    "window": "Window",
+    "region": "Region"
+  },
+
   "faq": {
     "title": "FAQ",
     "q1": "Cannot connect to Doubao?",
