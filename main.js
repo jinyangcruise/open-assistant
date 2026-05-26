@@ -42,6 +42,7 @@ for (const [id, config] of Object.entries(persistedAgents)) {
 
 let mainWindow;
 let overlayWindow;
+let regionWindow;
 /** Drag state for the overlay window (tracked in main process to avoid async IPC race) */
 let overlayDragState = null;
 let tray;
@@ -160,6 +161,40 @@ function hideOverlay() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.hide();
   }
+}
+
+// Create region capture overlay window
+function createRegionWindow(bounds) {
+  if (regionWindow && !regionWindow.isDestroyed()) {
+    regionWindow.destroy();
+  }
+
+  regionWindow = new BrowserWindow({
+    x: Math.round(bounds.x),
+    y: Math.round(bounds.y),
+    width: Math.round(bounds.width),
+    height: Math.round(bounds.height),
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'region-capture', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  regionWindow.setVisibleOnAllWorkspaces(true);
+
+  regionWindow.on('closed', function() {
+    regionWindow = null;
+  });
+
+  return regionWindow;
 }
 
 // Create system tray
@@ -536,6 +571,91 @@ function registerAllShortcuts() {
   console.log(`[Main] Registered ${count} prompt shortcut(s) for selected agents`);
 }
 
+/**
+ * Launch region capture overlay and return cropped PNG buffer.
+ * Creates a full-screen transparent window, sends the screenshot to it,
+ * and waits for the user to confirm or cancel.
+ * @param {Buffer} fullScreenshotBuffer - Full-screen PNG buffer
+ * @returns {Promise<Buffer>} Cropped region PNG buffer
+ */
+function startRegionCapture(fullScreenshotBuffer) {
+  var fullImage = nativeImage.createFromBuffer(fullScreenshotBuffer);
+  var physSize = fullImage.getSize();
+
+  // Get virtual screen bounds (CSS pixels)
+  var displays = screen.getAllDisplays();
+  var vx = Math.min.apply(null, displays.map(function(d) { return d.bounds.x; }));
+  var vy = Math.min.apply(null, displays.map(function(d) { return d.bounds.y; }));
+  var vw = Math.max.apply(null, displays.map(function(d) { return d.bounds.x + d.bounds.width; })) - vx;
+  var vh = Math.max.apply(null, displays.map(function(d) { return d.bounds.y + d.bounds.height; })) - vy;
+
+  // Resize screenshot to CSS pixel dimensions for display in overlay
+  var scaleFactor = screen.getPrimaryDisplay().scaleFactor;
+  var displayW = Math.round(physSize.width / scaleFactor);
+  var displayH = Math.round(physSize.height / scaleFactor);
+  var displayImage = fullImage.resize({ width: displayW, height: displayH });
+  var displayDataUrl = displayImage.toDataURL();
+
+  var win = createRegionWindow({ x: vx, y: vy, width: vw, height: vh });
+
+  return new Promise(function(resolve, reject) {
+    var settled = false;
+
+    function onConfirm(_event, imageDataUrl) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      try {
+        var img = nativeImage.createFromDataURL(imageDataUrl);
+        resolve(img.toPNG());
+      } catch (e) {
+        reject(e);
+      }
+    }
+
+    function onCancel() {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      var err = new Error('Region capture cancelled');
+      err.name = 'AbortError';
+      reject(err);
+    }
+
+    function onWindowClosed() {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      var err = new Error('Region capture cancelled');
+      err.name = 'AbortError';
+      reject(err);
+    }
+
+    function cleanup() {
+      ipcMain.removeListener('region-capture-confirm', onConfirm);
+      ipcMain.removeListener('region-capture-cancel', onCancel);
+      if (regionWindow && !regionWindow.isDestroyed()) {
+        regionWindow.close();
+      }
+    }
+
+    ipcMain.on('region-capture-confirm', onConfirm);
+    ipcMain.on('region-capture-cancel', onCancel);
+    if (regionWindow) {
+      regionWindow.on('closed', onWindowClosed);
+    }
+
+    win.loadFile(path.join(__dirname, 'region-capture', 'index.html'));
+    win.webContents.on('did-finish-load', function() {
+      win.webContents.send('region-capture-start', {
+        dataUrl: displayDataUrl,
+        screenBounds: { width: vw, height: vh },
+      });
+    });
+    win.show();
+  });
+}
+
 // Main shortcut handler
 async function handleShortcut(agentId, promptId, modeId) {
   if (isProcessing) {
@@ -554,9 +674,34 @@ async function handleShortcut(agentId, promptId, modeId) {
     const activeWindow = detectActiveWindow();
     console.log('Active window:', activeWindow);
 
-    // 2. Take screenshot (fullscreen or window depending on mode)
+    // 2. Take screenshot (depending on mode)
     var screenshotBuffer;
-    if (modeId === 'window') {
+    if (modeId === 'region') {
+      // Suspend global shortcuts during region capture
+      globalShortcut.unregisterAll();
+
+      // Take full screenshot (captured BEFORE overlay appears)
+      console.log('Taking full screenshot for region capture...');
+      var fullBuffer = await takeScreenshot();
+
+      // Launch region capture UI (blocks until confirm/cancel)
+      try {
+        screenshotBuffer = await startRegionCapture(fullBuffer);
+        console.log('Region captured:', screenshotBuffer.length, 'bytes');
+      } catch (regionErr) {
+        if (regionErr.name === 'AbortError') {
+          console.log('Region capture cancelled by user');
+          registerAllShortcuts();
+          isProcessing = false;
+          hideOverlay();
+          currentAbortController = null;
+          currentAdapter = null;
+          updateTrayStatus('Ready');
+          return;
+        }
+        throw regionErr;
+      }
+    } else if (modeId === 'window') {
       // Try PrintWindow first (captures only the target window, no overlapping windows)
       try {
         console.log('Capturing foreground window via PrintWindow...');
@@ -704,6 +849,7 @@ async function handleShortcut(agentId, promptId, modeId) {
     }
   } finally {
     hideOverlay();
+    registerAllShortcuts();
     currentAbortController = null;
     currentAdapter = null;
     isProcessing = false;
@@ -1140,6 +1286,11 @@ app.on('will-quit', () => {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.destroy();
     overlayWindow = null;
+  }
+  // Destroy region capture window if it exists
+  if (regionWindow && !regionWindow.isDestroyed()) {
+    regionWindow.destroy();
+    regionWindow = null;
   }
   // Disconnect any active agent connections
   AgentRegistry.getAll().forEach(a => {
