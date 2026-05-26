@@ -1080,8 +1080,13 @@ function parseKeyEvent(e) {
   if (keyMap[key]) {
     parts.push(keyMap[key]);
   } else if (key.length === 1) {
-    // Single character keys (letters, numbers, punctuation)
-    parts.push(key.toUpperCase());
+    // When Shift is held, use the physical key (e.code) instead of e.key
+    // so Ctrl+Shift+1 and Ctrl+Shift+! register as the same shortcut
+    if (e.shiftKey && code && code.startsWith('Digit')) {
+      parts.push(code.replace('Digit', ''));
+    } else {
+      parts.push(key.toUpperCase());
+    }
   } else if (code) {
     // Fallback to e.code for keys where e.key might be unreliable
     if (code.startsWith('Digit')) {
