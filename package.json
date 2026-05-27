@@ -1,6 +1,6 @@
 {
   "name": "open-assistant",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "Open Assistant - AI-powered code and document completion",
   "main": "main.js",
   "scripts": {
@@ -47,6 +47,7 @@
       "core/**/*",
       "renderer/**/*",
       "overlay/**/*",
+      "region-capture/**/*",
       "config.json",
       "assets/**/*",
       "locales/**/*"

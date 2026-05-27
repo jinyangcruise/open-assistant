@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.6 — 2026-05-27
+
+### English
+
+#### Fixes
+- **Packaged build missing region-capture files**: Added `region-capture/**/*` to `build.files` in `package.json` so the region screenshot UI works in installed builds
+- **PowerShell focus script errors**: Fixed `IntPtr.Parse` not available in older .NET; `GetCurrentThreadId` moved from `user32.dll` to `kernel32.dll`
+
+#### Changes
+- Version bumped to 0.5.6
+
+---
+
+### 中文
+
+#### 修复
+- **打包后缺少区域截图文件**：在 `package.json` 的 `build.files` 中添加 `region-capture/**/*`，修复安装版区域截图全黑的问题
+- **PowerShell 聚焦脚本报错**：修复旧版 .NET 没有 `IntPtr.Parse` 的问题；`GetCurrentThreadId` 从 `user32.dll` 移至 `kernel32.dll`
+
+#### 变更
+- 版本号更新至 0.5.6
+
 ## v0.5.5 — 2026-05-26
 
 ### English
